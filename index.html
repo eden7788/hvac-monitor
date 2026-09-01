@@ -1,0 +1,3559 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>온습도 모니터링 관리</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#f5f4f0;--surface:#fff;--surface2:#f9f8f5;--border:#e0ded8;--border2:#ccc;
+  --text:#1a1a18;--text2:#6b6b65;--text3:#9a9a95;
+  --ok:#1d9e75;--ok-bg:#eaf3de;--warn:#ba7517;--warn-bg:#faeeda;
+  --danger:#c0392b;--danger-bg:#fcebeb;--info:#185fa5;--info-bg:#e6f1fb;
+  --radius:10px;--radius-sm:6px;
+}
+body{font-family:'Apple SD Gothic Neo','Malgun Gothic',sans-serif;font-size:14px;color:var(--text);background:var(--bg);min-height:100vh}
+.app{max-width:1200px;margin:0 auto;padding:16px}
+.header{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 20px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.header-title{font-size:17px;font-weight:600;color:var(--text)}
+.header-sub{font-size:12px;color:var(--text2);margin-top:2px}
+.tab-bar{display:flex;gap:2px;border-bottom:1px solid var(--border);margin-bottom:16px}
+.tab{padding:9px 18px;cursor:pointer;font-size:13px;color:var(--text2);border:none;background:none;border-bottom:2px solid transparent;margin-bottom:-1px;font-family:inherit;font-weight:500}
+.tab.active{color:var(--text);border-bottom:2px solid var(--text)}
+.tab:hover:not(.active){color:var(--text)}
+.section{display:none}.section.active{display:block}
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px}
+.stat-label{font-size:11px;color:var(--text2);margin-bottom:4px}
+.stat-val{font-size:24px;font-weight:600}
+.stat-val.ok{color:var(--ok)}.stat-val.warn{color:var(--warn)}.stat-val.danger{color:var(--danger)}.stat-val.info{color:var(--info)}
+.badge{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:600;white-space:nowrap}
+.badge-ok{background:var(--ok-bg);color:var(--ok)}
+.badge-warn{background:var(--warn-bg);color:var(--warn)}
+.badge-danger{background:var(--danger-bg);color:var(--danger)}
+.badge-info{background:var(--info-bg);color:var(--info)}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:16px;margin-bottom:10px}
+.btn{padding:7px 14px;border:1px solid var(--border2);border-radius:var(--radius-sm);cursor:pointer;font-size:13px;background:var(--surface);color:var(--text);font-family:inherit;font-weight:500;transition:background 0.15s}
+.btn:hover{background:var(--surface2)}
+.btn-primary{background:var(--text);color:#fff;border-color:transparent}
+.btn-primary:hover{background:#333}
+.btn-sm{padding:4px 10px;font-size:12px}
+.btn-danger{background:var(--danger-bg);color:var(--danger);border-color:var(--danger)}
+.filter-bar{display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center}
+.filter-bar input,.filter-bar select{padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text);font-family:inherit}
+.filter-bar input:focus,.filter-bar select:focus{outline:none;border-color:#888}
+.store-block{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;overflow:hidden}
+.store-head{display:flex;align-items:center;gap:10px;padding:11px 16px;cursor:pointer;background:var(--surface);user-select:none}
+.store-head:hover{background:var(--surface2)}
+.store-name{font-weight:600;flex:1;font-size:14px}
+.store-meta{font-size:12px;color:var(--text2)}
+.chevron{font-size:11px;color:var(--text3);transition:transform 0.2s;margin-left:4px}
+.chevron.open{transform:rotate(90deg)}
+.ac-panel{display:none;border-top:1px solid var(--border);background:var(--surface2)}
+.ac-panel.open{display:block}
+.ac-table{width:100%;border-collapse:collapse}
+.ac-table th{font-size:11px;color:var(--text2);font-weight:600;padding:8px 12px;text-align:left;background:var(--surface2);border-bottom:1px solid var(--border)}
+.ac-table td{padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+.ac-table tr:last-child td{border-bottom:none}
+.ac-table tr:hover td{background:#f5f4f0}
+.temp-high{color:var(--danger);font-weight:600}
+.temp-warn{color:var(--warn);font-weight:500}
+.temp-low{color:var(--info)}
+.trend-badge-cool,.trend-badge-off,.trend-badge-runlow{display:inline-block;font-size:10px;font-weight:700;padding:2px 6px;border-radius:5px;white-space:nowrap;cursor:help}
+.trend-badge-cool{background:#fdecea;color:#c0392b;border:1px solid #f3c6c1}
+.trend-badge-off{background:#e6f1fb;color:#185fa5;border:1px solid #bcd9f2}
+.trend-badge-runlow{background:#fff4e5;color:#9a5b00;border:1px solid #f5c88a}
+.tm2-thresholds{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:14px;background:var(--surface)}
+.tm2-thresholds summary{padding:10px 14px;font-size:13px;font-weight:600;cursor:pointer;color:var(--text2);list-style:none}
+.tm2-thresholds summary::-webkit-details-marker{display:none}
+.tm2-thresh-grid{display:flex;gap:20px;flex-wrap:wrap;padding:2px 14px 14px;font-size:12px;color:var(--text2)}
+.tm2-thresh-item input{width:64px;padding:5px 7px;border:1px solid var(--border);border-radius:6px;font-size:13px;color:var(--text);margin-top:4px}
+.dash-tab{padding:7px 14px;border-radius:20px;border:1px solid var(--border);background:#fff;font-size:13px;cursor:pointer;color:var(--text2);font-weight:600}
+.dash-tab.active{background:var(--text);color:#fff;border-color:var(--text)}
+table.anomaly-table{width:100%;border-collapse:collapse;font-size:13px;margin-bottom:20px}
+table.anomaly-table th{text-align:left;font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--text2);border-bottom:1.5px solid var(--border);padding:8px}
+table.anomaly-table td{padding:9px 8px;border-bottom:1px solid var(--border);vertical-align:middle}
+table.anomaly-table tr:hover td{background:var(--surface2)}
+.store-link{font-weight:600;color:var(--info);cursor:pointer;text-decoration:none}
+.store-link:hover{text-decoration:underline}
+.brand-chip{font-size:10px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:0 5px;margin-left:5px}
+.gauge-track{position:relative;width:140px;height:7px;border-radius:4px;background:linear-gradient(90deg,#185fa5 0%,#7fb8e0 30%,#f2d17a 55%,#e8935f 78%,#c0392b 100%)}
+.gauge-track .g-tick{position:relative;top:-3px;width:2px;height:13px;background:#1a1a18;border-radius:1px;position:absolute}
+.gauge-track .g-dot{position:absolute;top:-2.5px;width:11px;height:11px;border-radius:50%;background:#fff;border:2.5px solid #1a1a18;transform:translateX(-50%)}
+.brand-group{border:1px solid var(--border);border-radius:var(--radius);margin-bottom:10px;overflow:hidden}
+.brand-group-head{display:flex;align-items:center;gap:8px;padding:10px 14px;background:var(--surface2);cursor:pointer;font-weight:700;font-size:13px}
+.brand-group-body{display:none;padding:12px 14px;background:var(--surface)}
+.brand-group-body.open{display:block}
+.note-grid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.note-card2{border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--surface)}
+.note-card2 textarea{width:100%;min-height:56px;resize:vertical;border:1px solid var(--border);border-radius:6px;padding:7px;font-size:12.5px;font-family:inherit;color:var(--text)}
+.note-card2 .note-meta{font-size:11px;color:var(--text2);margin-top:5px;display:flex;justify-content:space-between}
+.detail-panel-card{border:1px solid var(--border);border-radius:var(--radius);background:var(--surface);padding:14px;margin-bottom:20px}
+.note-cell{min-width:180px}
+.note-input{width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text);resize:none}
+.note-input:focus{outline:none;border-color:#888}
+.status-sel{padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:var(--surface);color:var(--text)}
+.upload-zone{border:2px dashed var(--border2);border-radius:var(--radius);padding:2.5rem;text-align:center;cursor:pointer;color:var(--text2);margin-bottom:16px;transition:background 0.15s}
+.upload-zone:hover{background:var(--surface2)}
+.upload-icon{font-size:32px;margin-bottom:8px}
+.upload-title{font-size:15px;font-weight:600;margin-bottom:4px;color:var(--text)}
+.upload-sub{font-size:12px}
+.hist-table{width:100%;border-collapse:collapse;font-size:13px}
+.hist-table th{padding:9px 12px;text-align:left;font-size:11px;color:var(--text2);font-weight:600;background:var(--surface2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:1}
+.hist-table td{padding:8px 12px;border-bottom:1px solid var(--border);vertical-align:middle}
+.hist-table tr:hover td{background:#f9f8f5}
+.hist-wrap{max-height:500px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius)}
+.setting-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px solid var(--border)}
+.setting-row:last-child{border-bottom:none}
+.setting-label{font-weight:500;font-size:14px}
+.setting-desc{font-size:12px;color:var(--text2);margin-top:2px}
+.setting-ctrl{display:flex;align-items:center;gap:6px}
+.setting-ctrl input[type=number]{width:65px;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;text-align:center;background:var(--surface);color:var(--text)}
+.setting-ctrl input[type=checkbox]{width:16px;height:16px;cursor:pointer}
+.sec-title{font-size:15px;font-weight:600;margin-bottom:12px;color:var(--text)}
+.trend-bar{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.trend-label{font-size:12px;color:var(--text2);width:70px;flex-shrink:0}
+.trend-track{flex:1;height:6px;background:var(--bg);border-radius:3px;overflow:hidden}
+.trend-fill{height:100%;border-radius:3px;transition:width 0.3s}
+.trend-val{font-size:12px;font-weight:500;width:45px;text-align:right;flex-shrink:0}
+@media(max-width:700px){
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .ac-table{display:block;overflow-x:auto}
+}
+.empty{text-align:center;padding:3rem;color:var(--text3);font-size:13px}
+.row{display:flex;gap:8px;align-items:center}
+.ml-auto{margin-left:auto}
+.tag{display:inline-block;padding:1px 7px;border-radius:12px;font-size:11px;background:var(--surface2);color:var(--text2);border:1px solid var(--border)}
+.on-badge{background:#fff8e6;color:#9a6000;border:1px solid #f0d080;border-radius:12px;padding:1px 7px;font-size:11px;font-weight:600}
+.off-badge{background:var(--surface2);color:var(--text2);border:1px solid var(--border);border-radius:12px;padding:1px 7px;font-size:11px}
+.ctrl-temp-input{width:58px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--surface);color:var(--text)}
+.ctrl-temp-input:focus{outline:none;border-color:#888}
+.trend-note-input{width:100%;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#fffdf5;color:var(--text);resize:none}
+.trend-note-input:focus{outline:none;border-color:#888}
+.diff-pos{color:var(--danger);font-weight:600}
+.diff-neg{color:var(--info)}
+.diff-zero{color:var(--ok)}
+.ctrl-history-panel{margin-top:6px;padding:6px 8px;background:#fafaf8;border:1px solid var(--border);border-radius:6px;min-height:32px}
+.ctrl-log-row{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12px}
+.ctrl-log-row{display:flex;flex-wrap:wrap;gap:5px;align-items:center;padding:6px 0;border-bottom:0.5px solid var(--border)}
+.ctrl-log-row:last-child{border-bottom:none}
+.ctrl-log-row-top{display:flex;gap:5px;align-items:center;width:100%;flex-wrap:nowrap;min-width:0}
+.ctrl-log-row-bot{display:flex;gap:5px;align-items:center;width:100%;padding-left:8px;margin-top:2px}
+.ctrl-log-hdr{display:flex;gap:5px;margin-bottom:3px;flex-wrap:wrap}
+.ctrl-log-hdr span{font-size:10px;color:var(--text3);font-weight:500}
+.ctrl-log-time{padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);text-align:center;width:100%}
+.ctrl-log-temp{padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);text-align:center;width:100%}
+.ctrl-log-mode{padding:3px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);width:100%}
+.mode-cool{background:#e6f1fb;color:#185fa5;border-color:#b5d4f4}
+.mode-heat{background:#fcebeb;color:#c0392b;border-color:#f7c1c1}
+.mode-fan{background:#eaf3de;color:#3b6d11;border-color:#9fe1cb}
+.ctrl-log-power{padding:3px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);width:100%}
+.ctrl-log-ctrltype{padding:3px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);width:100%}
+.ctrl-log-event{padding:3px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-weight:600;background:var(--surface);color:var(--text);width:100%}
+.ctrl-log-temp-range{display:flex;align-items:center;gap:4px;width:100%}
+.ctrl-log-temp-range input{width:62px;padding:3px 5px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--surface);color:var(--text)}
+.ctrl-log-temp-range input.auto-filled{background:var(--ok-bg);color:var(--ok);border-color:var(--ok)}
+.ctrl-log-del{width:20px;height:20px;border:none;background:none;cursor:pointer;color:var(--text3);font-size:14px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:3px}
+.ctrl-log-del:hover{background:var(--danger-bg);color:var(--danger)}
+.add-log-btn{font-size:11px;padding:3px 10px;border:1px dashed var(--border2);border-radius:4px;background:none;cursor:pointer;color:var(--text2);margin-top:6px}
+.add-log-btn:hover{background:var(--surface2)}
+.event-on{color:#fff;background:#1d9e75;border-color:#1d9e75;font-size:11px;font-weight:600}
+.event-change{color:var(--text);background:var(--surface);border-color:var(--border2);font-size:11px;font-weight:500}
+.event-off{color:#fff;background:#c0392b;border-color:#c0392b;font-size:11px;font-weight:600}
+.tl-wrap{margin-top:10px;padding:10px 12px;background:var(--surface2);border-radius:var(--radius-sm);border-left:3px solid var(--border2)}
+.tl-row-item{display:flex;gap:8px;align-items:flex-start;margin-bottom:8px;font-size:12px}
+.tl-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;margin-top:3px}
+.tl-content{flex:1}
+.tl-main{font-weight:500;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tl-sub{font-size:11px;color:var(--text2);margin-top:2px}
+.tl-dur{font-size:10px;padding:1px 6px;border-radius:8px}
+.tl-connector{width:1px;height:10px;background:var(--border);margin-left:4px}
+.pattern-note{width:100%;padding:3px 7px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;background:#f9f8f5;color:var(--text);resize:none;margin-top:4px}
+.pattern-note:focus{outline:none;border-color:#888}
+.expand-ac-btn{font-size:11px;padding:2px 7px;border:1px solid var(--border);border-radius:4px;background:none;cursor:pointer;color:var(--info);margin-left:4px;white-space:nowrap}
+.expand-ac-btn:hover{background:var(--info-bg)}
+.ac-detail-row{background:#fafaf8}
+.ac-detail-cell{padding:8px 12px 12px 12px}
+.detail-section{margin-bottom:8px}
+.detail-label{font-size:11px;font-weight:600;color:var(--text2);margin-bottom:4px;text-transform:none}
+.ctrl-log-mode{width:70px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text)}
+.ctrl-log-power{width:54px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text)}
+.mode-cool{color:#185fa5;font-weight:600}
+.mode-heat{color:#c0392b;font-weight:600}
+.mode-fan{color:#1d9e75;font-weight:600}
+.trend-row{display:flex;align-items:center;gap:6px;margin-bottom:5px}
+.trend-time-input{width:80px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);text-align:center}
+.trend-temp-input{width:68px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text);text-align:center}
+.trend-diff{font-size:11px;min-width:54px;font-weight:500}
+.trend-diff-rise{color:#c0392b}
+.trend-diff-fall{color:#185fa5}
+.trend-diff-same{color:var(--text2)}
+.trend-layout{display:grid;grid-template-columns:1fr 190px;gap:10px;align-items:start}
+.trend-graph-box{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px}
+.trend-graph-title{font-size:10px;color:var(--text3);margin-bottom:5px}
+.trend-summary{margin-top:8px;font-size:12px;color:var(--text2);line-height:1.7}
+.ctrl-log-ctrltype{width:100px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:var(--surface);color:var(--text)}
+.ctrl-ai{background:#e6f1fb;color:#185fa5;font-weight:600;border-color:#b5d4f4}
+.ctrl-manual{background:#faeeda;color:#854f0b;font-weight:600;border-color:#fac775}
+.sync-badge{font-size:12px;padding:4px 10px;border-radius:12px;font-weight:600;border:1px solid transparent;transition:all 0.3s}
+.rank-row{display:flex;align-items:center;gap:8px;margin-bottom:7px}
+.rank-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
+.rank-bar-wrap{flex:1;height:7px;background:var(--bg);border-radius:4px;overflow:hidden}
+.rank-bar-fill{height:100%;border-radius:4px}
+.rank-val{font-size:12px;font-weight:600;width:36px;text-align:right;flex-shrink:0}
+.rank-label{font-size:12px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.rpt-store-row{display:flex;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13px}
+.rpt-store-row:last-child{border-bottom:none}
+@media print{
+  .tab-bar,.header-sub,.filter-bar,.btn,.upload-zone,.setting-row button,
+  #sync-status,#check-session,.expand-ac-btn,.ctrl-log-del,.add-log-btn,
+  #rpt-type,#rpt-custom-range,#rpt-store-sel,.btn-danger{display:none!important}
+  .section{display:block!important}
+  #tab-daily,#tab-history,#tab-trend,#tab-settings{display:none!important}
+  #tab-report{display:block!important}
+  .card{break-inside:avoid;box-shadow:none;border:1px solid #ccc}
+  .app{max-width:100%;padding:0}
+  body{font-size:12px}
+  .stat-grid{grid-template-columns:repeat(5,1fr)}
+}
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+  opacity: 0; pointer-events: none;
+  transition: opacity 0.2s ease-in-out;
+}
+.modal-overlay.active {
+  opacity: 1; pointer-events: auto;
+}
+.modal-card {
+  background: #fff;
+  width: 90%; max-width: 600px;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(0,0,0,0.15);
+  display: flex; flex-direction: column;
+  max-height: 85vh;
+  transform: translateY(20px);
+  transition: transform 0.2s ease-in-out;
+}
+.modal-overlay.active .modal-card {
+  transform: translateY(0);
+}
+.modal-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e0ded8;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.modal-title {
+  font-size: 16px; font-weight: 600; color: #1a1a18;
+  display: flex; align-items: center; gap: 8px;
+}
+.modal-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.slack-textarea {
+  width: 100%; height: 280px;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 13px; line-height: 1.5;
+  color: #333; background: #fafaf9;
+  border: 1px solid #d0ceca; border-radius: 6px;
+  padding: 12px; resize: none;
+  outline: none;
+}
+.slack-textarea:focus {
+  border-color: #4a154b;
+}
+.modal-footer {
+  padding: 12px 20px;
+  border-top: 1px solid #e0ded8;
+  display: flex; justify-content: flex-end; gap: 8px;
+}
+.btn-slack-copy {
+  background: #4a154b; color: #fff; border: none;
+}
+.btn-slack-copy:hover {
+  background: #3c113d;
+}
+.toast-noti {
+  position: fixed; bottom: 20px; right: 20px;
+  background: #1a1a18; color: #fff;
+  padding: 10px 18px; border-radius: 6px;
+  font-size: 12px; font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 10000;
+  opacity: 0; transform: translateY(10px);
+  transition: all 0.2s ease-in-out;
+}
+.toast-noti.active {
+  opacity: 1; transform: translateY(0);
+}
+</style>
+</head>
+<body>
+<div class="app">
+<div class="header">
+  <div>
+    <div class="header-title">온습도 모니터링 관리</div>
+    <div class="header-sub" id="header-date"></div>
+  </div>
+  <div class="row">
+    <span id="sync-status" class="sync-badge" style="background:#f5f4f0;color:#9a9a95;border-color:#e0ded8">⏳ 연결 중...</span>
+    <select id="check-session" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)" onchange="onSessionChange()">
+      <option value="오전">오전 점검</option>
+      <option value="오후">오후 점검</option>
+    </select>
+  </div>
+</div>
+<div class="tab-bar">
+  <button class="tab active" onclick="switchTab('daily',this)">데일리 체크</button>
+  <button class="tab" onclick="switchTab('history',this)">히스토리</button>
+  <button class="tab" onclick="switchTab('report',this)">보고서</button>
+  <button class="tab" onclick="switchTab('settings',this)">설정</button>
+</div>
+<div id="tab-daily" class="section active">
+  <div class="stat-grid">
+    <div class="stat"><div class="stat-label">금일 점검 매장</div><div class="stat-val info" id="s-total">0</div></div>
+    <div class="stat"><div class="stat-label">정상</div><div class="stat-val ok" id="s-ok">0</div></div>
+    <div class="stat"><div class="stat-label">🌡 냉방효과 미미</div><div class="stat-val warn" id="s-warn">0</div></div>
+    <div class="stat"><div class="stat-label">❄ OFF인데 저온</div><div class="stat-val danger" id="s-bad">0</div></div>
+  </div>
+  <div id="upload-section">
+    <div class="card" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+        <div>
+          <div style="font-size:14px;font-weight:600;margin-bottom:2px">📁 이전 기록 불러오기</div>
+          <div style="font-size:12px;color:var(--text2)">어제 저장한 엑셀 파일을 올리면 누적 히스토리가 복원돼요</div>
+        </div>
+        <div class="row">
+          <span id="restore-status" style="font-size:12px;color:var(--text2)"></span>
+          <button class="btn btn-sm" onclick="document.getElementById('restore-input').click()">누적시트 불러오기 (여러 파일 가능)</button>
+          <input type="file" id="restore-input" accept=".xlsx,.xls" style="display:none" multiple onchange="handleRestoreFile(this)">
+          <button class="btn btn-sm" id="btn-load-sheets" onclick="loadFromSheets()" style="display:none">🔗 구글 시트에서 불러오기</button>
+        </div>
+      </div>
+    </div>
+    <div style="margin-bottom:12px;text-align:right">
+      <span style="font-size:12px;color:var(--text2);margin-right:6px">업로드 일자 수동 지정:</span>
+      <input type="date" id="manual-date" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)">
+    </div>
+    <div class="upload-zone" onclick="document.getElementById('file-input').click()">
+      <div class="upload-icon">📂</div>
+      <div class="upload-title" id="upload-session-label">오늘 오전 데이터 업로드</div>
+      <div class="upload-sub">원본 엑셀 파일을 드래그하거나 클릭해 업로드하세요<br><span style="color:#1d9e75;font-weight:600">또는 샘플 데이터(3/30 오전) 불러오기 →</span></div>
+      <input type="file" id="file-input" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this)">
+    </div>
+    <div style="text-align:center;margin-top:-8px;margin-bottom:16px">
+      <button class="btn btn-sm" onclick="loadSample()">샘플 데이터 불러오기 (3월 30일 오전)</button>
+    </div>
+  </div>
+  <div id="daily-content" style="display:none">
+    <div class="filter-bar" style="margin-bottom:6px;padding-bottom:8px;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;color:var(--text2);white-space:nowrap;font-weight:500">이전 기록 조회</span>
+      <input type="date" id="view-date" list="hist-dates" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)" onchange="loadHistoryView()">
+      <select id="view-session" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)" onchange="loadHistoryView()">
+        <option value="">세션 선택</option>
+        <option value="오전">오전</option>
+        <option value="오후">오후</option>
+      </select>
+      <button class="btn btn-sm" onclick="clearHistoryView()" style="white-space:nowrap">↩ 오늘 데이터로</button>
+      <span id="view-mode-badge" style="display:none;font-size:11px;padding:2px 10px;border-radius:10px;background:var(--info-bg);color:var(--info);font-weight:500">📅 조회 모드</span>
+      <span id="session-active-badge" style="display:none;font-size:11px;padding:2px 10px;border-radius:10px;font-weight:500"></span>
+    </div>
+    <div class="filter-bar">
+      <input type="text" id="srch-store" placeholder="매장명 검색..." style="width:200px" oninput="renderDaily()">
+      <select id="filter-brand" onchange="renderDaily()">
+        <option value="all">전체 브랜드</option>
+      </select>
+      <select id="filter-status" onchange="renderDaily()">
+        <option value="all">전체 상태</option>
+        <option value="cooling">🌡 냉방효과미미만</option>
+        <option value="offlow">❄ OFF인데 저온만</option>
+        <option value="runlow">❄ 가동중 저온만</option>
+        <option value="ok">정상만</option>
+      </select>
+      <label style="font-size:13px;display:flex;align-items:center;gap:5px;cursor:pointer">
+        <input type="checkbox" id="show-issue-only" onchange="renderDaily()"> 이상/주의만 보기
+      </label>
+      <div class="ml-auto row">
+        <button class="btn btn-sm" id="merge-sessions-btn" onclick="mergeSessions()" style="display:none;background:#fff8e6;color:#9a6000;border-color:#f0d080;white-space:nowrap;font-weight:600">⊕ 오전+오후 통합 보기</button>
+        <button class="btn btn-sm btn-primary" id="save-btn" onclick="saveDaily()">💾 저장 + 엑셀 내보내기</button>
+        <span id="auto-save-status" style="font-size:12px;color:var(--text2);margin-left:4px;margin-right:8px;vertical-align:middle;display:inline-flex;align-items:center;height:32px;font-weight:500"></span>
+        <button class="btn btn-sm" onclick="generateSlackReport()" style="background:#4a154b;color:#fff;border-color:transparent;white-space:nowrap">💬 슬랙 보고서 복사</button>
+        <button class="btn btn-sm" onclick="exportSharedHTML()" style="white-space:nowrap">🔗 공유용 HTML</button>
+        <button class="btn btn-sm" onclick="exportCSV()">CSV 내보내기</button>
+        <button class="btn btn-sm btn-danger" onclick="resetDaily()">초기화</button>
+      </div>
+    </div>
+    <div id="store-blocks"></div>
+  </div>
+</div>
+<div id="tab-history" class="section">
+  <div class="sec-title">📊 오늘의 이상징후 현황</div>
+  <div class="stat-grid" style="grid-template-columns:repeat(5,1fr)">
+    <div class="stat"><div class="stat-label">총 매장 수</div><div class="stat-val info" id="hd-total">0</div></div>
+    <div class="stat"><div class="stat-label">총 측정 건수</div><div class="stat-val" id="hd-count">0</div></div>
+    <div class="stat"><div class="stat-label">냉방효과 미미</div><div class="stat-val danger" id="hd-cooling">0</div></div>
+    <div class="stat"><div class="stat-label">OFF인데 저온</div><div class="stat-val info" id="hd-offlow">0</div></div>
+    <div class="stat"><div class="stat-label">이상징후 매장</div><div class="stat-val danger" id="hd-issue-stores">0</div></div>
+  </div>
+  <details class="tm2-thresholds">
+    <summary>⚙ 판정 기준 조정</summary>
+    <div class="tm2-thresh-grid">
+      <div class="tm2-thresh-item">냉방가동 판단 설정온도 ≤<br><input type="number" step="0.5" id="d-coolsetmax" onchange="syncQuickThreshold('coolSetMax',this.value)"></div>
+      <div class="tm2-thresh-item">최소 하락폭 (미만 시 이상)<br><input type="number" step="0.5" id="d-mindrop" onchange="syncQuickThreshold('minDrop',this.value)"></div>
+      <div class="tm2-thresh-item">단일측정 허용 차이<br><input type="number" step="0.5" id="d-singlegap" onchange="syncQuickThreshold('singleGap',this.value)"></div>
+      <div class="tm2-thresh-item">OFF 저온 기준 ≤<br><input type="number" step="0.5" id="d-offlowmax" onchange="syncQuickThreshold('offLowMax',this.value)"></div>
+      <div class="tm2-thresh-item">가동중 저온 기준 (설정-실내 ≥)<br><input type="number" step="0.5" id="d-runlowgap" onchange="syncQuickThreshold('runLowGap',this.value)"></div>
+    </div>
+  </details>
+  <div class="tab-bar" style="border-bottom:none;gap:6px;margin-bottom:14px">
+    <button class="dash-tab active" data-dtab="all" onclick="setHistTab('all')">전체 (<span id="hd-cnt-all">0</span>)</button>
+    <button class="dash-tab" data-dtab="cooling" onclick="setHistTab('cooling')">🌡 냉방효과 미미 (<span id="hd-cnt-cooling">0</span>)</button>
+    <button class="dash-tab" data-dtab="offlow" onclick="setHistTab('offlow')">❄ OFF인데 저온 (<span id="hd-cnt-offlow">0</span>)</button>
+    <button class="dash-tab" data-dtab="runlow" onclick="setHistTab('runlow')">❄ 가동중 저온 (<span id="hd-cnt-runlow">0</span>)</button>
+  </div>
+  <div id="hist-dash-table"></div>
+  <div id="store-detail-panel"></div>
+  <div id="brand-notes-section" style="margin-top:10px;margin-bottom:28px"></div>
+  <div class="sec-title">히스토리 조회</div>
+  <div class="filter-bar">
+    <input type="text" id="h-store" placeholder="매장명 검색..." style="width:190px" oninput="renderHistory()">
+    <input type="text" id="h-ac" placeholder="에어컨/센서명..." style="width:160px" oninput="renderHistory()">
+    <input type="date" id="h-from" onchange="renderHistory()">
+    <span style="color:var(--text2);font-size:13px">~</span>
+    <input type="date" id="h-to" onchange="renderHistory()">
+    <select id="h-session" onchange="renderHistory()">
+      <option value="all">전체</option>
+      <option value="오전">오전</option>
+      <option value="오후">오후</option>
+    </select>
+    <button class="btn btn-sm" onclick="clearHistFilter()">초기화</button>
+    <span id="h-count" style="font-size:12px;color:var(--text2);margin-left:4px"></span>
+  </div>
+  <div class="hist-wrap">
+    <table class="hist-table" style="table-layout:fixed;width:100%">
+      <thead>
+        <tr>
+          <th style="width:90px">날짜</th>
+          <th style="width:44px">세션</th>
+          <th style="width:160px">점포명</th>
+          <th style="width:120px">에어컨</th>
+          <th style="width:72px">실내온도</th>
+          <th style="width:64px">편차</th>
+          <th style="width:56px">ON/OFF</th>
+          <th style="width:56px">상태</th>
+          <th>특이사항 / 온도추이 / 제어이력</th>
+        </tr>
+      </thead>
+      <tbody id="hist-body"></tbody>
+    </table>
+  </div>
+</div>
+<div id="tab-report" class="section">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:14px">
+    <div class="sec-title" style="margin-bottom:0">보고서</div>
+    <div class="row" style="flex-wrap:wrap;gap:6px">
+      <select id="rpt-type" onchange="renderReport()" style="padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)">
+        <option value="week">이번 주</option>
+        <option value="month">이번 달</option>
+        <option value="custom">기간 직접 선택</option>
+      </select>
+      <span id="rpt-custom-range" style="display:none;align-items:center;gap:4px">
+        <input type="date" id="rpt-from" onchange="renderReport()" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)">
+        <span style="color:var(--text2)">~</span>
+        <input type="date" id="rpt-to" onchange="renderReport()" style="padding:5px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)">
+      </span>
+      <button class="btn btn-primary btn-sm" onclick="printReport()">🖨 PDF / 인쇄</button>
+    </div>
+  </div>
+  <div id="rpt-summary-cards" class="stat-grid" style="grid-template-columns:repeat(5,1fr);margin-bottom:12px"></div>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+    <div class="card" id="rpt-store-rank-card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">매장별 이상 발생 순위</div>
+      <div id="rpt-store-rank"></div>
+    </div>
+    <div class="card" id="rpt-ac-rank-card">
+      <div style="font-size:13px;font-weight:600;margin-bottom:10px">에어컨별 이상 빈도 TOP 10</div>
+      <div id="rpt-ac-rank"></div>
+    </div>
+  </div>
+  <div class="card">
+    <div style="font-size:13px;font-weight:600;margin-bottom:10px">매장별 상세 리포트</div>
+    <div class="filter-bar" style="margin-bottom:10px">
+      <select id="rpt-store-sel" onchange="renderStoreReport()" style="width:280px;padding:6px 10px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)">
+        <option value="">-- 매장 선택 --</option>
+      </select>
+    </div>
+    <div id="rpt-store-detail"><div class="empty">매장을 선택하면 상세 리포트를 확인할 수 있어요</div></div>
+  </div>
+</div>
+<div id="tab-settings" class="section">
+  <div class="sec-title">이상 판정 기준</div>
+  <div class="card">
+    <div class="setting-row">
+      <div><div class="setting-label">고온 이상 기준</div><div class="setting-desc">실내온도가 이 값 이상이면 이상으로 표시</div></div>
+      <div class="setting-ctrl"><span style="font-size:13px">≥</span><input type="number" id="s-high" value="25" min="0" max="50"><span style="font-size:13px">°C</span></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">저온 이상 기준</div><div class="setting-desc">실내온도가 이 값 미만이면 이상으로 표시</div></div>
+      <div class="setting-ctrl"><span style="font-size:13px">&lt;</span><input type="number" id="s-low" value="18" min="0" max="30"><span style="font-size:13px">°C</span></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">온도편차 주의 기준</div><div class="setting-desc">편차 절댓값이 이 값 초과 시 주의로 표시</div></div>
+      <div class="setting-ctrl"><span style="font-size:13px">±</span><input type="number" id="s-dev" value="1.5" step="0.5" min="0" max="10"><span style="font-size:13px">°C</span></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">자동 판정 적용</div><div class="setting-desc">업로드 시 기준에 따라 자동으로 상태 판정</div></div>
+      <div class="setting-ctrl"><input type="checkbox" id="s-auto" checked></div>
+    </div>
+    <div style="margin-top:14px">
+      <button class="btn btn-primary btn-sm" onclick="saveSettings()">설정 저장</button>
+      <span id="settings-saved" style="font-size:12px;color:var(--ok);margin-left:10px;display:none">✓ 저장됨</span>
+    </div>
+  </div>
+  <div class="sec-title" style="margin-top:20px">🌡 냉방효과·저온 이상징후 판정 기준</div>
+  <div class="card">
+    <div class="setting-desc" style="margin-bottom:10px">에어컨을 낮은 온도로 가동했는데도 실내온도가 안 떨어지거나, OFF 상태인데도 비정상적으로 낮은 경우를 잡아냅니다. 같은 에어컨(컨트롤러)의 여러 측정 시각(오전/오후 포함)을 비교해 판정합니다.</div>
+    <div class="setting-row">
+      <div><div class="setting-label">"냉방 가동 중" 판단 기준 설정온도</div><div class="setting-desc">설정온도가 이 값 이하일 때만 냉방효과를 점검</div></div>
+      <div class="setting-ctrl"><span style="font-size:13px">≤</span><input type="number" id="s-coolsetmax" value="19" step="0.5" min="0" max="30"><span style="font-size:13px">°C</span></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">최소 하락폭 (미만이면 이상)</div><div class="setting-desc">같은 에어컨을 여러 번 측정했을 때, 첫 측정과 마지막 측정 사이 온도가 이만큼도 안 떨어지면 "냉방효과 미미"</div></div>
+      <div class="setting-ctrl"><input type="number" id="s-mindrop" value="1.0" step="0.5" min="0" max="10"><span style="font-size:13px">°C</span></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">단일 측정 시 허용 차이</div><div class="setting-desc">그 에어컨이 한 번만 측정된 경우, 실내온도와 설정온도 차이가 이 이상이면 "냉방효과 미미(추정)"</div></div>
+      <div class="setting-ctrl"><input type="number" id="s-singlegap" value="6" step="0.5" min="0" max="20"><span style="font-size:13px">°C</span></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">OFF인데 저온으로 볼 기준</div><div class="setting-desc">에어컨이 OFF 상태인데 실내온도가 이 값 이하면 "OFF인데 저온"으로 표시 (냉기 유입·센서 오류 의심)</div></div>
+      <div class="setting-ctrl"><input type="number" id="s-offlowmax" value="22" step="0.5" min="0" max="30"><span style="font-size:13px">°C</span></div>
+    </div>
+    <div class="setting-row">
+      <div><div class="setting-label">가동중 저온으로 볼 기준 (설정-실내 차이)</div><div class="setting-desc">에어컨이 ON 상태에서 실내온도가 설정온도보다 이 값 이상 낮으면 "가동중 저온"으로 표시 (과냉방 의심)</div></div>
+      <div class="setting-ctrl"><span style="font-size:13px">≥</span><input type="number" id="s-runlowgap" value="3" step="0.5" min="0" max="20"><span style="font-size:13px">°C</span></div>
+    </div>
+    <div class="setting-row" style="align-items:flex-start">
+      <div>
+        <div class="setting-label">브랜드 목록</div>
+        <div class="setting-desc">엑셀에 '브랜드' 컬럼이 없을 때, 매장명이 이 목록 중 하나로 시작하면 그 브랜드로 인식합니다. 줄바꿈으로 구분.</div>
+      </div>
+      <textarea id="s-brands" style="width:220px;height:70px;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+    </div>
+    <div style="margin-top:14px">
+      <button class="btn btn-primary btn-sm" onclick="saveSettings()">설정 저장</button>
+      <span id="settings-saved2" style="font-size:12px;color:var(--ok);margin-left:10px;display:none">✓ 저장됨</span>
+    </div>
+  </div>
+  <div class="sec-title" style="margin-top:20px">Google Sheets 연동</div>
+  <div class="card">
+    <div class="setting-row" style="flex-wrap:wrap;gap:8px">
+      <div style="flex:1;min-width:200px">
+        <div class="setting-label">Apps Script 웹앱 URL</div>
+        <div class="setting-desc">저장 시 자동으로 Google Sheet에 누적됩니다. 설정하지 않으면 연동하지 않습니다.</div>
+      </div>
+      <div style="flex:2;min-width:260px">
+        <input type="text" id="s-sheets-url" placeholder="https://script.google.com/macros/s/..." style="width:100%;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;box-sizing:border-box">
+      </div>
+    </div>
+    <div style="margin-top:10px;display:flex;gap:8px;align-items:center">
+      <button class="btn btn-primary btn-sm" onclick="saveSheetsUrl()">URL 저장</button>
+      <button class="btn btn-sm" onclick="testSheetsConnection()">연결 테스트</button>
+      <span id="sheets-status" style="font-size:12px;color:var(--text2)"></span>
+    </div>
+  </div>
+  <div class="sec-title" style="margin-top:20px">브라우저 저장소 관리</div>
+  <div class="card">
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">자동 저장 상태</div>
+        <div class="setting-desc" id="ls-status">히스토리 저장 시 자동으로 브라우저에 보관됩니다</div>
+      </div>
+      <button class="btn btn-sm" onclick="checkStorageSize()">용량 확인</button>
+    </div>
+    <div class="setting-row">
+      <div>
+        <div class="setting-label">저장된 히스토리 초기화</div>
+        <div class="setting-desc">브라우저 저장 데이터만 삭제 (내장 초기 데이터는 유지)</div>
+      </div>
+      <button class="btn btn-sm btn-danger" onclick="clearStorage()">초기화</button>
+    </div>
+  </div>
+  <div class="sec-title" style="margin-top:20px">자주 쓰는 문구 관리</div>
+  <div class="card">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:12px">
+      <div>
+        <div class="setting-label">자주 쓰는 사유</div>
+        <div class="setting-desc" style="margin-bottom:6px">줄바꿈(엔터)으로 구분해서 입력하세요</div>
+        <textarea id="s-quick-reasons" style="width:100%;height:120px;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+      </div>
+      <div>
+        <div class="setting-label">자주 쓰는 특이사항</div>
+        <div class="setting-desc" style="margin-bottom:6px">줄바꿈(엔터)으로 구분해서 입력하세요</div>
+        <textarea id="s-quick-notes" style="width:100%;height:120px;padding:6px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;resize:vertical;font-family:inherit"></textarea>
+      </div>
+    </div>
+    <div>
+      <button class="btn btn-primary btn-sm" onclick="saveQuickPhrases()">문구 설정 저장</button>
+      <span id="quick-phrases-saved" style="font-size:12px;color:var(--ok);margin-left:10px;display:none">✓ 저장됨</span>
+    </div>
+  </div>
+  <div class="sec-title" style="margin-top:20px">엑셀 컬럼 매핑</div>
+  <div class="card">
+    <div style="font-size:12px;color:var(--text2);margin-bottom:14px">원본 엑셀 파일의 헤더명이 다를 경우 수정하세요. 현재 파일 기준으로 설정되어 있습니다.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">점포명 컬럼</div><input type="text" id="c-store" value="점포 명" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)"></div>
+      <div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">층 컬럼</div><input type="text" id="c-floor" value="층" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)"></div>
+      <div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">공간 컬럼</div><input type="text" id="c-space" value="공간" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)"></div>
+      <div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">실내온도 컬럼</div><input type="text" id="c-temp" value="실내온도" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)"></div>
+      <div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">온도편차 컬럼</div><input type="text" id="c-dev" value="온도편차" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)"></div>
+      <div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">컨트롤러명 컬럼</div><input type="text" id="c-ac" value="매칭 컨트롤러 명" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)"></div>
+      <div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">ON/OFF 컬럼</div><input type="text" id="c-onoff" value="ON / OFF" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)"></div>
+      <div><div style="font-size:11px;color:var(--text2);margin-bottom:4px">평균온도 컬럼</div><input type="text" id="c-avg" value="평균온도" style="width:100%;padding:6px 8px;border:1px solid var(--border);border-radius:var(--radius-sm);font-size:13px;background:var(--surface);color:var(--text)"></div>
+    </div>
+    <div style="margin-top:12px"><button class="btn btn-primary btn-sm" onclick="saveCols()">컬럼 설정 저장</button></div>
+  </div>
+</div>
+</div>
+<div id="slack-modal" class="modal-overlay">
+  <div class="modal-card">
+    <div class="modal-header">
+      <div class="modal-title">💬 일일 이상/주의 매장 슬랙 보고서</div>
+      <button class="ctrl-log-del" onclick="closeSlackModal()" style="font-size: 18px; width: 28px; height: 28px;">×</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size: 12px; color: var(--text2); margin-bottom: 10px;">
+        아래 텍스트 상자의 내용이 클립보드에 자동으로 복사되었습니다. 슬랙 창에 붙여넣어(Ctrl+V) 보고를 완료해 주세요!
+      </div>
+      <textarea id="slack-report-text" class="slack-textarea" readonly></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeSlackModal()">닫기</button>
+      <button class="btn btn-slack-copy" onclick="copySlackReportText()">📋 다시 복사하기</button>
+    </div>
+  </div>
+</div>
+<div id="toast-message" class="toast-noti">✓ 슬랙 보고서가 복사되었습니다!</div>
+<script>
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyB0BgYp7IslWaoo0v9J4tRCUOvky_zsqqk",
+  authDomain: "temp-monit.firebaseapp.com",
+  databaseURL: "https://temp-monit-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "temp-monit",
+  storageBucket: "temp-monit.firebasestorage.app",
+  messagingSenderId: "107311887531",
+  appId: "1:107311887531:web:9b67ea17fd5bd803f233ee"
+};
+firebase.initializeApp(FIREBASE_CONFIG);
+const db = firebase.database();
+let historyRef, dailyWorkRef, storeNotesRef, dailyWorkSaveTimer=null;
+const SAMPLE_DAILY = [{"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "롯데리아 부산사상점", "층": "2F", "공간": "매장", "평균온도": "25.4℃", "센서명": "2.휴게실앞 센서", "실내온도": "25.1℃", "온도편차": "-0.3℃", "매칭 컨트롤러 명": "2.휴게실앞", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "롯데리아 수원역광장점", "층": "1F", "공간": "매장(키오스크 에어컨 고장)", "평균온도": "19.2℃", "센서명": "3.폐유창고센서", "실내온도": "17.9℃", "온도편차": "-1.3℃", "매칭 컨트롤러 명": "3.폐유창고에어컨", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "롯데리아 안산DT점", "층": "3F", "공간": "휴게실", "평균온도": "17.0℃", "센서명": "16번 센서", "실내온도": "17.0℃", "온도편차": "-", "매칭 컨트롤러 명": "16번 에어컨", "ON / OFF": "OFF", "AI 여부": "사용자 제어", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "롯데리아 오산세교DT점", "층": "2F", "공간": "매장", "평균온도": "25.6℃", "센서명": "2층 센서#4", "실내온도": "25.8℃", "온도편차": "+0.1℃", "매칭 컨트롤러 명": "2층 에어컨#4", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "롯데리아 인천연희DT점", "층": "2F", "공간": "매장", "평균온도": "17.9℃", "센서명": "7.왼쪽 창가 센서", "실내온도": "17.0℃", "온도편차": "-0.9℃", "매칭 컨트롤러 명": "7.왼쪽 창가", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "롯데리아 화정역점", "층": "1F", "공간": "매장", "평균온도": "17.5℃", "센서명": "1. 출입구 센서", "실내온도": "17.0℃", "온도편차": "-0.5℃", "매칭 컨트롤러 명": "1. 출입구 에어컨", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "엔젤리너스 선유도역", "층": "1F", "공간": "카운터홀", "평균온도": "25.8℃", "센서명": "1. 입구1센서", "실내온도": "29.5℃", "온도편차": "+3.7℃", "매칭 컨트롤러 명": "1. 입구1", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "엔젤리너스 선유도역", "층": "1F", "공간": "사무", "평균온도": "25.2℃", "센서명": "8. 사무실센서", "실내온도": "25.2℃", "온도편차": "-", "매칭 컨트롤러 명": "8. 사무실", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "엔젤리너스 해운대백병원", "층": "1F", "공간": "카운터", "평균온도": "26.9℃", "센서명": "1. 바리스타 센서", "실내온도": "26.9℃", "온도편차": "-", "매칭 컨트롤러 명": "1. 바리스타", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "크리스피크림도넛 송도국제도시점", "층": "1F", "공간": "매장", "평균온도": "26.0℃", "센서명": "2. 창가 센서", "실내온도": "26.0℃", "온도편차": "-0.0℃", "매칭 컨트롤러 명": "2. 창가", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "10:20:00", "점포 명": "크리스피크림도넛 양산물금점", "층": "1F", "공간": "매장", "평균온도": "26.3℃", "센서명": "1.홀 센서", "실내온도": "26.2℃", "온도편차": "-0.1℃", "매칭 컨트롤러 명": "1.홀", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "롯데리아 김해장유점", "층": "1F", "공간": "매장", "평균온도": "24.2℃", "센서명": "3번 에어컨", "실내온도": "25.1℃", "온도편차": "+0.9℃", "매칭 컨트롤러 명": "3번 에어컨", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "롯데리아 답십리점", "층": "1F", "공간": "카운터", "평균온도": "23.7℃", "센서명": "6. 튀김기 위", "실내온도": "25.1℃", "온도편차": "+1.4℃", "매칭 컨트롤러 명": "6. 튀김기 위", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "롯데리아 부산사상점", "층": "2F", "공간": "매장", "평균온도": "25.9℃", "센서명": "2.휴게실앞 센서", "실내온도": "25.6℃", "온도편차": "-0.3℃", "매칭 컨트롤러 명": "2.휴게실앞", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "롯데리아 부산사상점", "층": "1F", "공간": "매장", "평균온도": "25.2℃", "센서명": "1. 중앙 센서", "실내온도": "25.4℃", "온도편차": "+0.2℃", "매칭 컨트롤러 명": "1.중앙", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "롯데리아 안산DT점", "층": "3F", "공간": "휴게실", "평균온도": "17.5℃", "센서명": "16번 센서", "실내온도": "17.5℃", "온도편차": "-", "매칭 컨트롤러 명": "16번 에어컨", "ON / OFF": "OFF", "AI 여부": "사용자 제어", "설정 온도": ""}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "롯데리아 오산세교DT점", "층": "2F", "공간": "매장", "평균온도": "26.0℃", "센서명": "2층 센서#4", "실내온도": "26.1℃", "온도편차": "+0.1℃", "매칭 컨트롤러 명": "2층 에어컨#4", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "롯데리아 인천연희DT점", "층": "2F", "공간": "매장", "평균온도": "18.1℃", "센서명": "7.왼쪽 창가 센서", "실내온도": "17.2℃", "온도편차": "-0.9℃", "매칭 컨트롤러 명": "7.왼쪽 창가", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "롯데리아 화정역점", "층": "1F", "공간": "매장", "평균온도": "17.8℃", "센서명": "1. 출입구 센서", "실내온도": "17.3℃", "온도편차": "-0.5℃", "매칭 컨트롤러 명": "1. 출입구 에어컨", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "엔젤리너스 구로디지털역점", "층": "1F", "공간": "매장", "평균온도": "24.6℃", "센서명": "1. 센서", "실내온도": "25.3℃", "온도편차": "+0.7℃", "매칭 컨트롤러 명": "1. AC", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "엔젤리너스 선유도역", "층": "1F", "공간": "카운터홀", "평균온도": "26.5℃", "센서명": "1. 입구1센서", "실내온도": "30.1℃", "온도편차": "+3.6℃", "매칭 컨트롤러 명": "1. 입구1", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "엔젤리너스 해운대백병원", "층": "1F", "공간": "사무실", "평균온도": "25.9℃", "센서명": "1. 창고 센서", "실내온도": "27.3℃", "온도편차": "+1.4℃", "매칭 컨트롤러 명": "1. 창고", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "크리스피크림도넛 송도국제도시점", "층": "1F", "공간": "매장", "평균온도": "26.6℃", "센서명": "2. 창가 센서", "실내온도": "26.6℃", "온도편차": "+0.0℃", "매칭 컨트롤러 명": "2. 창가", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "크리스피크림도넛 양산물금점", "층": "1F", "공간": "매장", "평균온도": "27.0℃", "센서명": "2.홀입구 센서", "실내온도": "27.4℃", "온도편차": "+0.4℃", "매칭 컨트롤러 명": "2.홀입구", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}, {"날짜": "2026-03-30", "분류": "오전", "시간": "11:20:00", "점포 명": "크리스피크림도넛 의정부민락점", "층": "1F", "공간": "1층 엘레베이터앞", "평균온도": "17.6℃", "센서명": "6번 센서", "실내온도": "17.6℃", "온도편차": "-", "매칭 컨트롤러 명": "6번 에어컨", "ON / OFF": "OFF", "AI 여부": "-", "설정 온도": "-"}];
+const HISTORY_DATA = []
+let state = {
+  dailyData:[],
+  history:[],
+  openStores:{},
+  openAcDetail:{},
+  ctrlLogs:{},
+  trendPoints:{},
+  recordTime:{},
+  isViewMode:false,
+  origDailyData:[],
+  settings:{
+    highTemp:25,
+    lowTemp:18,
+    devThreshold:1.5,
+    coolSetMax:19,
+    minDrop:1.0,
+    singleGap:6,
+    offLowMax:22,
+    runLowGap:3,
+    brands:['롯데리아','엔젤리너스','크리스피크림도넛'],
+    autoJudge:true,
+    sheetsUrl:'',
+    quickReasons:[
+      "오후 들어서 실내 온도 계속 급상승함",
+      "설정온도 대비 실내온도 초과 유지",
+      "바람 세기 약으로 가동 중",
+      "송풍 모드 가동 중",
+      "기기 OFF 상태"
+    ],
+    quickNotes:[
+      "실외기 과열 의심으로 현장 점검 필요",
+      "필터 청소 주기 확인 필요",
+      "현장 확인 필요",
+      "기기 미작동 점검 요망"
+    ]
+  },
+  sessionData:{},
+  currentSession:'오전',
+  mergedMode:false,
+  dashTab:'all',
+  storeNotes:{},
+  openBrands:{},
+  noteFilter:'',
+  detailStore:null
+};
+function escHtml(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function calcStatus(r){
+  const s=state.settings;
+  if(r._status==='cooling'||r._status==='offlow'||r._status==='runlow'||r._status==='ok')return r._status;
+  if(r._status==='danger'||r._status==='warning')return r._status;
+  const t=parseTemp(r['실내온도']),d=parseTemp(r['온도편차']);
+  if(t!==null&&(t>=s.highTemp||t<s.lowTemp))return'danger';
+  if(d!==null&&Math.abs(d)>s.devThreshold)return'warning';
+  return'ok';
+}
+function parseTemp(s){
+  if(!s||s==='-'||s==='')return null;
+  try{return parseFloat(String(s).replace('℃','').replace('+','').trim());}catch{return null;}
+}
+function judgeAC(r){
+  const t=parseTemp(r['실내온도']);
+  const dev=parseTemp(r['온도편차']);
+  const s=state.settings;
+  if(t!==null&&(t>=s.highTemp||t<s.lowTemp))return 'danger';
+  if(dev!==null&&Math.abs(dev)>s.devThreshold)return 'warning';
+  return 'ok';
+}
+function judgeStore(acs){
+  return acs.some(a=>a._status==='cooling'||a._status==='offlow'||a._status==='runlow'||a._status==='danger'||a._status==='warning')?'danger':'ok';
+}
+function judgeAutoStatus(readings){
+  const flags=judgeTrendFlags(readings);
+  if(flags.some(f=>f.type==='cooling'))return 'cooling';
+  if(flags.some(f=>f.type==='offlow'))return 'offlow';
+  if(flags.some(f=>f.type==='runlow'))return 'runlow';
+  return 'ok';
+}
+function syncAutoStatuses(){
+  if(!state.dailyData.length)return;
+  const byStore=groupByStore(state.dailyData);
+  Object.values(byStore).forEach(acs=>{
+    const acGroups=groupByAcKey(acs);
+    Object.values(acGroups).forEach(readingsRaw=>{
+      const readings=sortReadingsByTime(readingsRaw);
+      const autoStatus=state.settings.autoJudge?judgeAutoStatus(readings):'ok';
+      readings.forEach(r=>{
+        const idx=r._absIdx;
+        if(idx===undefined)return;
+        const target=state.dailyData[idx];
+        if(!target)return;
+        if(!target._manualStatus){
+          const prevStatus=target._status;
+          target._status=autoStatus;
+          if((autoStatus==='cooling'||autoStatus==='offlow'||autoStatus==='runlow')&&prevStatus!==autoStatus&&!target._note&&!target._patternNote){
+            const acKey=String(target['매칭 컨트롤러 명']||target['센서명']||'').trim();
+            for(let i=state.history.length-1;i>=0;i--){
+              const h=state.history[i];
+              if(h['점포 명']===target['점포 명']&&String(h['매칭 컨트롤러 명']||'').trim()===acKey){
+                if(h['비고'])target._note=h['비고'];
+                if(h['추이패턴'])target._patternNote=h['추이패턴'];
+                break;
+              }
+            }
+          }
+        }
+      });
+    });
+  });
+}
+function sortReadingsByTime(readings){
+  return [...readings].sort((a,b)=>{
+    const pa=(a['분류']||'').indexOf('오후')!==-1?1:0;
+    const pb=(b['분류']||'').indexOf('오후')!==-1?1:0;
+    if(pa!==pb)return pa-pb;
+    const ta=String(a['시간']||'');
+    const tb=String(b['시간']||'');
+    return ta.localeCompare(tb);
+  });
+}
+function getOnOff(r){
+  return String(r['ON / OFF']||'').trim().toUpperCase().replace(/\t/g,'');
+}
+function getBrand(r){
+  if(typeof r==='string'){
+    const store=r.trim();
+    const brands=(state.settings.brands||[]);
+    let best='';
+    brands.forEach(b=>{ if(b && store.indexOf(b)===0 && b.length>best.length) best=b; });
+    if(best) return best;
+    return store.split(/\s+/)[0]||'기타';
+  }
+  if(r['브랜드']&&String(r['브랜드']).trim()) return String(r['브랜드']).trim();
+  return getBrand(r['점포 명']||'');
+}
+function judgeTrendFlags(readingsRaw){
+  const s=state.settings;
+  const readings=sortReadingsByTime(readingsRaw);
+  const flags=[];
+  readings.forEach(r=>{
+    const t=parseTemp(r['실내온도']);
+    const onoff=getOnOff(r);
+    if(onoff==='OFF'&&t!==null&&t<=(s.offLowMax!==undefined?s.offLowMax:22)){
+      const label=(r['시간']?String(r['시간']).substring(0,5):(r['분류']||''));
+      flags.push({type:'offlow',detail:`${label} OFF 상태에서 실내 ${t.toFixed(1)}℃`});
+    }
+    if(onoff==='ON'){
+      const setT=parseTemp(r['설정 온도']);
+      if(setT!==null&&t!==null){
+        const gap=setT-t;
+        const runLowGap=s.runLowGap!==undefined?s.runLowGap:3;
+        if(gap>=runLowGap){
+          const label=(r['시간']?String(r['시간']).substring(0,5):(r['분류']||''));
+          flags.push({type:'runlow',detail:`${label} 설정 ${setT.toFixed(0)}℃ 대비 실내 ${t.toFixed(1)}℃ (${gap.toFixed(1)}℃ 낮음)`});
+        }
+      }
+    }
+  });
+  const coolSetMax=s.coolSetMax!==undefined?s.coolSetMax:19;
+  const minDrop=s.minDrop!==undefined?s.minDrop:1.0;
+  const singleGap=s.singleGap!==undefined?s.singleGap:6;
+  if(readings.length>=2){
+    const first=readings[0], last=readings[readings.length-1];
+    const setT=parseTemp(first['설정 온도']);
+    const ft=parseTemp(first['실내온도']), lt=parseTemp(last['실내온도']);
+    if(getOnOff(first)==='ON'&&setT!==null&&setT<=coolSetMax&&ft!==null&&lt!==null){
+      const drop=ft-lt;
+      if(drop<minDrop){
+        const fl=first['시간']?String(first['시간']).substring(0,5):(first['분류']||'');
+        const ll=last['시간']?String(last['시간']).substring(0,5):(last['분류']||'');
+        flags.push({type:'cooling',detail:`${fl} ${ft.toFixed(1)}℃ → ${ll} ${lt.toFixed(1)}℃ (설정 ${setT.toFixed(0)}℃, 변화 ${drop.toFixed(1)}℃)`});
+      }
+    }
+  } else if(readings.length===1){
+    const r=readings[0];
+    const setT=parseTemp(r['설정 온도']);
+    const t=parseTemp(r['실내온도']);
+    if(getOnOff(r)==='ON'&&setT!==null&&t!==null&&setT<=coolSetMax){
+      const gap=t-setT;
+      if(gap>=singleGap){
+        flags.push({type:'cooling',detail:`실내 ${t.toFixed(1)}℃ (설정 ${setT.toFixed(0)}℃, 차이 ${gap.toFixed(1)}℃, 단일측정)`});
+      }
+    }
+  }
+  return flags;
+}
+function getToday(){return new Date().toISOString().split('T')[0];}
+function initHeader(){
+  const d=new Date();
+  document.getElementById('header-date').textContent=d.toLocaleDateString('ko-KR',{year:'numeric',month:'long',day:'numeric',weekday:'long'});
+}
+function switchTab(t,el){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('tab-'+t).classList.add('active');
+  el.classList.add('active');
+  if(t==='history'){renderHistory();renderHistoryDashboard();}
+  if(t==='report')renderReport();
+}
+function handleRestoreFile(input){
+  const files=Array.from(input.files||[]);
+  if(!files.length)return;
+  input.onchange=null;
+  const statusEl=document.getElementById('restore-status');
+  statusEl.textContent=`⏳ 0/${files.length} 처리 중...`;
+  statusEl.style.color='var(--text2)';
+  files.sort((a,b)=>a.name.localeCompare(b.name));
+  let totalAdded=0, totalLoaded=0, doneCount=0, errors=[];
+  function parseOneFile(file){
+    return new Promise(resolve=>{
+      const reader=new FileReader();
+      reader.onload=e=>{
+        try{
+          const wb=XLSX.read(e.target.result,{type:'binary'});
+          const sheetName=wb.SheetNames.find(n=>n.includes('누적'))||wb.SheetNames[0];
+          const ws=wb.Sheets[sheetName];
+          const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+          if(!rows.length){resolve({loaded:0,added:0});return;}
+          const normalized=rows.map(r=>({
+            '날짜': parseExcelDate(r['날짜']),
+            '분류': r['분류']||r['오전 / 오후']||'',
+            '점포 명': r['점포 명']||r['점포명']||'',
+            '브랜드': r['브랜드']||r['brand']||'',
+            '층': r['층']||'',
+            '공간': r['공간']||'',
+            '평균온도': r['평균온도']||'',
+            '센서명': r['센서명']||'',
+            '실내온도': r['실내온도']||'',
+            '온도편차': r['온도편차']||'',
+            '매칭 컨트롤러 명': r['매칭 컨트롤러 명']||r['에어컨(컨트롤러)']||'',
+            'ON / OFF': r['ON / OFF']||r['ON/OFF']||'',
+            'AI 여부': r['AI 여부']||r['AI여부']||'',
+            '설정 온도': r['설정 온도']||r['설정온도']||'',
+            '비고': r['비고']||r['특이사항']||'',
+            '추이패턴': r['추이패턴']||'',
+            '온도추이': r['온도추이']||'',
+            '메모': r['메모']||'',
+            '제어이력': r['제어이력']||'',
+            '_status': r['_status']||(r['상태']==='이상'?'danger':r['상태']==='주의'?'warning':r['상태']==='정상'?'ok':'')
+          })).filter(r=>r['점포 명']&&r['날짜']);
+          let added=0;
+          normalized.forEach(r=>{
+            const isDup=state.history.some(h=>
+              h['날짜']===r['날짜'] &&
+              String(h['분류']||'').substring(0,2)===String(r['분류']||'').substring(0,2) &&
+              h['점포 명']===r['점포 명'] &&
+              h['매칭 컨트롤러 명']===r['매칭 컨트롤러 명']
+            );
+            if(!isDup){state.history.push(r);added++;}
+          });
+          resolve({loaded:normalized.length,added});
+        }catch(err){
+          errors.push(file.name+': '+err.message);
+          resolve({loaded:0,added:0});
+        }
+      };
+      reader.readAsBinaryString(file);
+    });
+  }
+  files.reduce((chain, file, idx)=>{
+    return chain.then(()=>parseOneFile(file).then(({loaded,added})=>{
+      totalLoaded+=loaded; totalAdded+=added; doneCount++;
+      statusEl.textContent=`⏳ ${doneCount}/${files.length} 처리 중...`;
+    }));
+  }, Promise.resolve()).then(()=>{
+    state.history.forEach(r=>{if(r['날짜'])r['날짜']=parseExcelDate(r['날짜']);});
+    saveToStorage();
+    updateHistDateList();
+    renderHistory();
+    statusEl.textContent=`✓ ${state.history.length}건 누적됨`;
+    statusEl.style.color='var(--ok)';
+    const errMsg=errors.length?'\n\n⚠ 오류 파일:\n'+errors.join('\n'):'';
+    alert(`✓ 백업 파일 ${files.length}개 복원 완료\n· 총 불러온 데이터: ${totalLoaded}건\n· 새로 추가: ${totalAdded}건 (중복 제외)\n· 전체 히스토리: ${state.history.length}건${errMsg}`);
+    setTimeout(()=>{input.onchange=e=>handleRestoreFile(input);input.value='';},300);
+  });
+}
+function handleFile(input){
+  const file=input.files[0];if(!file)return;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    try{
+      const wb=XLSX.read(e.target.result,{type:'binary'});
+      const sheetName=wb.SheetNames.find(n=>n.includes('일일'))||wb.SheetNames[0];
+      const ws=wb.Sheets[sheetName];
+      const rows=XLSX.utils.sheet_to_json(ws,{defval:''});
+      processRows(rows);
+    }catch(err){alert('파일 오류: '+err.message);}
+    finally{setTimeout(()=>{input.value='';},300);}
+  };
+  reader.readAsBinaryString(file);
+}
+function processRows(rows){
+  const manualDateEl = document.getElementById('manual-date');
+  const manualDate = manualDateEl ? manualDateEl.value : '';
+  const data=rows.map(r=>({
+    '날짜':manualDate || parseExcelDate(r['날짜']),
+    '분류':r['분류']||r['오전 / 오후']||'',
+    '시간':(()=>{const t=r['시간'];if(!t)return'';const n=parseFloat(t);if(!isNaN(n)&&n<1){const tot=Math.round(n*1440);return String(Math.floor(tot/60)).padStart(2,'0')+':'+String(tot%60).padStart(2,'0');}return String(t).substring(0,5);})(),
+    '점포 명':r['점포 명']||r['점포명']||'',
+    '브랜드':r['브랜드']||r['brand']||'',
+    '층':r['층']||'',
+    '공간':r['공간']||'',
+    '평균온도':r['평균온도']||'',
+    '센서명':r['센서명']||'',
+    '실내온도':r['실내온도']||'',
+    '온도편차':r['온도편차']||'',
+    '매칭 컨트롤러 명':r['매칭 컨트롤러 명']||r['매칭컨트롤러명']||'',
+    'ON / OFF':r['ON / OFF']||r['ON/OFF']||'',
+    'AI 여부':r['AI 여부']||r['AI여부']||'',
+    '설정 온도':r['설정 온도']||r['설정온도']||'',
+  })).filter(r=>r['점포 명']);
+  data.forEach(r=>{ r._status='ok'; });
+  loadDailyData(data);
+}
+function loadSample(){
+  const data=SAMPLE_DAILY.map(r=>({...r,'_note':'','_status':'ok'}));
+  loadDailyData(data);
+}
+function loadDailyData(data){
+  state.currentSession=document.getElementById('check-session').value;
+  state.mergedMode=false;
+  state.dailyData=data;
+  loadDailyWork();
+  document.getElementById('upload-section').style.display='none';
+  document.getElementById('daily-content').style.display='block';
+  updateStats();
+  renderDaily();
+  updateSessionBadge();
+  checkMergeAvailable();
+}
+function resetDaily(){
+  const sess=state.currentSession||document.getElementById('check-session').value;
+  if(!confirm(`현재 ${sess} 데이터를 초기화할까요?`))return;
+  state.dailyData=[];state.openStores={};state.openAcDetail={};
+  state.ctrlLogs={};state.trendPoints={};
+  delete state.sessionData[sess];
+  clearDailyWork();
+  document.getElementById('upload-section').style.display='block';
+  document.getElementById('daily-content').style.display='none';
+  updateStats();
+  updateUploadTitle();
+  updateSessionBadge();
+}
+function onSessionChange(){
+  const newSess=document.getElementById('check-session').value;
+  const oldSess=state.currentSession;
+  if(oldSess===newSess)return;
+  if(state.dailyData.length){
+    Object.keys(state.openAcDetail).forEach(k=>{if(state.openAcDetail[k])collectDetailInputs(k);});
+    state.sessionData[oldSess]={
+      dailyData:JSON.parse(JSON.stringify(state.dailyData)),
+      ctrlLogs:JSON.parse(JSON.stringify(state.ctrlLogs)),
+      trendPoints:JSON.parse(JSON.stringify(state.trendPoints)),
+      recordTime:JSON.parse(JSON.stringify(state.recordTime||{})),
+      openStores:{...state.openStores}
+    };
+  }
+  state.mergedMode=false;
+  state.currentSession=newSess;
+  state.openStores={};
+  state.openAcDetail={};
+  if(state.sessionData[newSess]){
+    const saved=state.sessionData[newSess];
+    state.dailyData=saved.dailyData||[];
+    state.ctrlLogs=saved.ctrlLogs||{};
+    state.trendPoints=saved.trendPoints||{};
+    state.recordTime=saved.recordTime||{};
+    state.openStores=saved.openStores||{};
+    document.getElementById('upload-section').style.display='none';
+    document.getElementById('daily-content').style.display='block';
+    updateStats();
+    renderDaily();
+  } else {
+    state.dailyData=[];
+    state.ctrlLogs={};
+    state.trendPoints={};
+    state.recordTime={};
+    document.getElementById('upload-section').style.display='block';
+    document.getElementById('daily-content').style.display='none';
+    updateStats();
+    updateUploadTitle();
+  }
+  updateSessionBadge();
+  checkMergeAvailable();
+}
+function mergeSessions(){
+  if(state.dailyData.length&&!state.mergedMode){
+    Object.keys(state.openAcDetail).forEach(k=>{if(state.openAcDetail[k])collectDetailInputs(k);});
+    state.sessionData[state.currentSession]={
+      dailyData:JSON.parse(JSON.stringify(state.dailyData)),
+      ctrlLogs:JSON.parse(JSON.stringify(state.ctrlLogs)),
+      trendPoints:JSON.parse(JSON.stringify(state.trendPoints)),
+      recordTime:JSON.parse(JSON.stringify(state.recordTime||{})),
+      openStores:{...state.openStores}
+    };
+  }
+  const am=state.sessionData['오전'];
+  const pm=state.sessionData['오후'];
+  if(!am||!am.dailyData||!am.dailyData.length||!pm||!pm.dailyData||!pm.dailyData.length){
+    alert('오전/오후 데이터가 모두 있어야 통합할 수 있습니다.\n두 세션을 모두 업로드한 후 시도하세요.');
+    return;
+  }
+  state.dailyData=[
+    ...JSON.parse(JSON.stringify(am.dailyData)),
+    ...JSON.parse(JSON.stringify(pm.dailyData))
+  ];
+  state.ctrlLogs={...JSON.parse(JSON.stringify(am.ctrlLogs||{}))};
+  Object.entries(pm.ctrlLogs||{}).forEach(([k,v])=>{if(!state.ctrlLogs[k])state.ctrlLogs[k]=v;});
+  state.trendPoints={...JSON.parse(JSON.stringify(am.trendPoints||{})),...JSON.parse(JSON.stringify(pm.trendPoints||{}))};
+  state.recordTime={...JSON.parse(JSON.stringify(am.recordTime||{})),...JSON.parse(JSON.stringify(pm.recordTime||{}))};
+  state.openStores={};
+  state.openAcDetail={};
+  state.mergedMode=true;
+  state.currentSession='통합';
+  document.getElementById('upload-section').style.display='none';
+  document.getElementById('daily-content').style.display='block';
+  updateStats();
+  renderDaily();
+  updateSessionBadge();
+  checkMergeAvailable();
+}
+function checkMergeAvailable(){
+  const btn=document.getElementById('merge-sessions-btn');
+  if(!btn)return;
+  const curr=state.currentSession;
+  const has오전=(curr==='오전'&&state.dailyData.length>0)||
+    !!(state.sessionData['오전']&&state.sessionData['오전'].dailyData&&state.sessionData['오전'].dailyData.length);
+  const has오후=(curr==='오후'&&state.dailyData.length>0)||
+    !!(state.sessionData['오후']&&state.sessionData['오후'].dailyData&&state.sessionData['오후'].dailyData.length);
+  btn.style.display=(has오전&&has오후&&!state.mergedMode)?'inline-block':'none';
+}
+function updateUploadTitle(){
+  const sess=document.getElementById('check-session').value;
+  const el=document.getElementById('upload-session-label');
+  if(el) el.textContent=`오늘 ${sess} 데이터 업로드`;
+}
+function updateSessionBadge(){
+  const badge=document.getElementById('session-active-badge');
+  if(!badge)return;
+  const curr=state.currentSession||document.getElementById('check-session').value;
+  if(state.mergedMode){
+    badge.style.display='inline';
+    badge.style.background='#eaf3de';
+    badge.style.color='#1d9e75';
+    badge.style.border='1px solid #9fe1cb';
+    badge.textContent='오전+오후 통합 보기 중';
+    return;
+  }
+  const other=curr==='오전'?'오후':'오전';
+  const otherHasData=!!(state.sessionData[other]&&state.sessionData[other].dailyData&&state.sessionData[other].dailyData.length);
+  if(state.dailyData.length){
+    badge.style.display='inline';
+    badge.style.background=curr==='오전'?'#e6f4ff':'#fff7e6';
+    badge.style.color=curr==='오전'?'#185fa5':'#9a6000';
+    badge.style.border=curr==='오전'?'1px solid #b5d4f4':'1px solid #f0d080';
+    badge.textContent=`${curr} 점검 데이터`+(otherHasData?` · ${other} 작성 완료`:'');
+  } else {
+    badge.style.display='none';
+  }
+}
+function groupByStore(rows){
+  const byStore={};
+  rows.forEach((r,absIdx)=>{const k=r['점포 명'];if(!byStore[k])byStore[k]=[];byStore[k].push({...r,_absIdx:absIdx});});
+  return byStore;
+}
+function groupByAcKey(acs){
+  const groups={};
+  acs.forEach((ac,i)=>{
+    const key=ac['매칭 컨트롤러 명']||ac['센서명']||i;
+    if(!groups[key])groups[key]=[];
+    groups[key].push(ac);
+  });
+  return groups;
+}
+function collectAnomalies(){
+  syncAutoStatuses();
+  const byStore=groupByStore(state.dailyData);
+  const list=[];
+  Object.entries(byStore).forEach(([sName,acs])=>{
+    const brand=getBrand(acs[0]);
+    const acGroups=groupByAcKey(acs);
+    Object.values(acGroups).forEach(readingsRaw=>{
+      const readings=sortReadingsByTime(readingsRaw);
+      const last=readings[readings.length-1];
+      const status=last._status||'ok';
+      if(status!=='cooling'&&status!=='offlow'&&status!=='runlow')return;
+      const flags=judgeTrendFlags(readings);
+      const matched=flags.find(f=>f.type===status);
+      list.push({
+        store:sName, brand,
+        floor:last['층']||'-', space:last['공간']||'-',
+        sensor:last['매칭 컨트롤러 명']||last['센서명']||'-',
+        type:status, detail:matched?matched.detail:'담당자가 직접 지정한 상태',
+        setTemp:parseTemp(readings[0]['설정 온도']),
+        actualTemp:parseTemp(last['실내온도'])
+      });
+    });
+  });
+  return list;
+}
+function gaugeHtml(setTemp,actualTemp){
+  const lo=10,hi=32;
+  const pct=v=>Math.max(0,Math.min(100,((v-lo)/(hi-lo))*100));
+  let html='<div class="gauge-track">';
+  if(setTemp!==null&&setTemp!==undefined)html+=`<div class="g-tick" style="left:${pct(setTemp)}%"></div>`;
+  if(actualTemp!==null&&actualTemp!==undefined)html+=`<div class="g-dot" style="left:${pct(actualTemp)}%"></div>`;
+  html+='</div>';
+  return html;
+}
+function jsEsc(s){return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/'/g,"\\'");}
+function fbSafeKey(s){return String(s==null?'':s).replace(/[.#$\[\]\/]/g,'_');}
+function statusLabel(status){
+  if(status==='cooling')return '냉방효과미미';
+  if(status==='offlow')return 'OFF인데저온';
+  if(status==='runlow')return '가동중저온';
+  if(status==='danger')return '이상';
+  if(status==='warning')return '주의';
+  return '정상';
+}
+function reportBucket(status){
+  if(status==='cooling'||status==='offlow'||status==='runlow'||status==='danger')return 'danger';
+  if(status==='warning')return 'warning';
+  return 'ok';
+}
+function populateBrandFilter(){
+  const sel=document.getElementById('filter-brand');
+  if(!sel)return;
+  const cur=sel.value;
+  const brands=[...new Set(state.dailyData.map(r=>getBrand(r)))].sort((a,b)=>a.localeCompare(b,'ko'));
+  sel.innerHTML='<option value="all">전체 브랜드</option>'+brands.map(b=>`<option value="${escHtml(b)}"${b===cur?' selected':''}>${escHtml(b)}</option>`).join('');
+}
+function renderHistoryDashboard(){
+  const totalEl=document.getElementById('hd-total');
+  if(!totalEl)return;
+  const anomalies=collectAnomalies();
+  totalEl.textContent=Object.keys(groupByStore(state.dailyData)).length;
+  document.getElementById('hd-count').textContent=state.dailyData.length;
+  document.getElementById('hd-cooling').textContent=anomalies.filter(a=>a.type==='cooling').length;
+  document.getElementById('hd-offlow').textContent=anomalies.filter(a=>a.type==='offlow').length;
+  document.getElementById('hd-issue-stores').textContent=new Set(anomalies.map(a=>a.store)).size;
+  const dMap={coolSetMax:'d-coolsetmax',minDrop:'d-mindrop',singleGap:'d-singlegap',offLowMax:'d-offlowmax',runLowGap:'d-runlowgap'};
+  Object.entries(dMap).forEach(([key,id])=>{const e=document.getElementById(id);if(e&&document.activeElement!==e)e.value=state.settings[key];});
+  document.getElementById('hd-cnt-all').textContent=anomalies.length;
+  document.getElementById('hd-cnt-cooling').textContent=anomalies.filter(a=>a.type==='cooling').length;
+  document.getElementById('hd-cnt-offlow').textContent=anomalies.filter(a=>a.type==='offlow').length;
+  const runlowCntEl=document.getElementById('hd-cnt-runlow');
+  if(runlowCntEl)runlowCntEl.textContent=anomalies.filter(a=>a.type==='runlow').length;
+  const tab=state.dashTab||'all';
+  const shown=tab==='all'?anomalies:anomalies.filter(a=>a.type===tab);
+  const cont=document.getElementById('hist-dash-table');
+  if(!shown.length){
+    cont.innerHTML='<div class="empty">해당 조건의 이상징후가 없습니다 👍 (엑셀을 업로드하면 여기에 표시돼요)</div>';
+  }else{
+    const tagInfo={
+      cooling:{cls:'trend-badge-cool',label:'🌡 냉방효과미미'},
+      offlow:{cls:'trend-badge-off',label:'❄ OFF인데 저온'},
+      runlow:{cls:'trend-badge-runlow',label:'❄ 가동중 저온'}
+    };
+    const rows=shown.map(a=>{
+      const info=tagInfo[a.type]||tagInfo.cooling;
+      return `<tr>
+        <td><span class="store-link" onclick="showStoreDetail('${jsEsc(a.store)}')">${escHtml(a.store)}</span><span class="brand-chip">${escHtml(a.brand)}</span></td>
+        <td>${escHtml(a.floor)}</td>
+        <td>${escHtml(a.space)}</td>
+        <td>${escHtml(a.sensor)}</td>
+        <td><span class="${info.cls}">${info.label}</span></td>
+        <td>${gaugeHtml(a.setTemp,a.actualTemp)}</td>
+        <td style="color:var(--text2);font-size:12px">${escHtml(a.detail)}</td>
+      </tr>`;
+    }).join('');
+    cont.innerHTML=`<table class="anomaly-table"><thead><tr>
+      <th>매장</th><th>층</th><th>공간</th><th>센서</th><th>유형</th><th>설정 → 실내</th><th>상세</th>
+    </tr></thead><tbody>${rows}</tbody></table>`;
+  }
+  if(state.detailStore)showStoreDetail(state.detailStore);
+  renderBrandNotes();
+}
+function setHistTab(tab){
+  state.dashTab=tab;
+  document.querySelectorAll('.dash-tab').forEach(b=>b.classList.toggle('active',b.getAttribute('data-dtab')===tab));
+  renderHistoryDashboard();
+}
+function syncQuickThreshold(key,val){
+  const n=parseFloat(val);
+  if(!isNaN(n))state.settings[key]=n;
+  localStorage.setItem(LS_KEY_SETTINGS,JSON.stringify(state.settings));
+  const map={coolSetMax:'s-coolsetmax',minDrop:'s-mindrop',singleGap:'s-singlegap',offLowMax:'s-offlowmax',runLowGap:'s-runlowgap'};
+  const id=map[key];
+  if(id){const e=document.getElementById(id);if(e)e.value=state.settings[key];}
+  if(state.dailyData.length)renderDaily();
+  renderHistoryDashboard();
+}
+function updateStats(){
+  collectAnomalies();
+  const byStore={};
+  state.dailyData.forEach(r=>{if(!byStore[r['점포 명']])byStore[r['점포 명']]=[];byStore[r['점포 명']].push(r);});
+  const stores=Object.values(byStore);
+  document.getElementById('s-total').textContent=stores.length;
+  document.getElementById('s-ok').textContent=stores.filter(a=>judgeStore(a)==='ok').length;
+  const acKeySeen=new Set();
+  let coolingAcCount=0, offlowAcCount=0;
+  state.dailyData.forEach(r=>{
+    const key=r['점포 명']+'||'+(r['매칭 컨트롤러 명']||r['센서명']||'');
+    if(acKeySeen.has(key))return;
+    acKeySeen.add(key);
+    if(r._status==='cooling')coolingAcCount++;
+    else if(r._status==='offlow'||r._status==='runlow')offlowAcCount++;
+  });
+  document.getElementById('s-warn').textContent=coolingAcCount;
+  document.getElementById('s-bad').textContent=offlowAcCount;
+  renderHistoryDashboard();
+}
+function renderDaily(){
+  syncAutoStatuses();
+  populateBrandFilter();
+  const q=(document.getElementById('srch-store').value||'').trim();
+  const fs=document.getElementById('filter-status').value;
+  const issueOnly=document.getElementById('show-issue-only').checked;
+  const brandSel=document.getElementById('filter-brand');
+  const brandFilter=brandSel?brandSel.value:'all';
+  const byStore={};
+  state.dailyData.forEach((r,absIdx)=>{const k=r['점포 명'];if(!byStore[k])byStore[k]=[];byStore[k].push({...r,_absIdx:absIdx});});
+  let entries=Object.entries(byStore);
+  if(q)entries=entries.filter(([n])=>n.includes(q));
+  if(issueOnly)entries=entries.filter(([n,acs])=>judgeStore(acs)!=='ok');
+  if(fs!=='all'){
+    if(fs==='ok')entries=entries.filter(([n,acs])=>judgeStore(acs)==='ok');
+    else entries=entries.filter(([n,acs])=>acs.some(a=>a._status===fs));
+  }
+  if(brandFilter&&brandFilter!=='all')entries=entries.filter(([n,acs])=>getBrand(acs[0])===brandFilter);
+  const cont=document.getElementById('store-blocks');
+  if(!entries.length){cont.innerHTML='<div class="empty">조건에 맞는 매장이 없습니다</div>';renderHistoryDashboard();return;}
+  const byBrand={};
+  entries.forEach(([sName,acs])=>{
+    const brand=getBrand(acs[0]);
+    (byBrand[brand]=byBrand[brand]||[]).push([sName,acs]);
+  });
+  const brandNames=Object.keys(byBrand).sort((a,b)=>a.localeCompare(b,'ko'));
+  cont.innerHTML=brandNames.map(brand=>{
+    const storeList=byBrand[brand].sort((a,b)=>a[0].localeCompare(b[0],'ko'));
+    const isOpen=state.openBrands[brand]!==false;
+    const brandIssueCount=storeList.filter(([n,acs])=>judgeStore(acs)!=='ok').length;
+    const blocks=storeList.map(([sName,acs])=>buildStoreBlock(sName,acs)).join('');
+    return `<div class="brand-group">
+      <div class="brand-group-head" onclick="toggleDailyBrandGroup('${jsEsc(brand)}')">
+        <span>${isOpen?'▾':'▸'}</span><span>${escHtml(brand)}</span>
+        <span style="font-weight:400;color:var(--text2);font-size:12px">매장 ${storeList.length}개${brandIssueCount?` · 이상징후 ${brandIssueCount}개`:''}</span>
+      </div>
+      <div class="brand-group-body${isOpen?' open':''}">${blocks}</div>
+    </div>`;
+  }).join('');
+  renderHistoryDashboard();
+}
+function toggleDailyBrandGroup(brand){
+  state.openBrands[brand]=!(state.openBrands[brand]!==false);
+  renderDaily();
+}
+function buildStoreBlock(sName,acs){
+  const st=judgeStore(acs);
+  const bdCls=st==='danger'?'badge-danger':'badge-ok';
+  const bdTxt=st==='danger'?'이상':'정상';
+  const isOpen=state.openStores[sName];
+  const firstR=acs[0];
+  const timeInfo=firstR['시간']?' · '+firstR['시간'].substring(0,5):'';
+  const sessionInfo=firstR['분류']?' '+firstR['분류'].substring(0,2):'';
+  const safe=sName.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const acGroups={};
+  acs.forEach((ac,i)=>{
+    const key=ac['매칭 컨트롤러 명']||ac['센서명']||i;
+    const absIdx=ac._absIdx!==undefined?ac._absIdx:i;
+    if(!acGroups[key]){acGroups[key]={readings:[],origIdx:absIdx,ac};}
+    acGroups[key].readings.push({...ac});
+  });
+  let acRows='';
+  let issueTotal=0;
+  Object.values(acGroups).forEach((group,i)=>{
+    const ac=group.readings[group.readings.length-1];
+    const readings=sortReadingsByTime(group.readings);
+    const isMulti=readings.length>1;
+    const s=state.dailyData[group.origIdx]?(state.dailyData[group.origIdx]._status||'ok'):'ok';
+    if(s==='cooling'||s==='offlow'||s==='runlow')issueTotal++;
+    const flags=judgeTrendFlags(readings);
+    const matchedFlag=flags.find(f=>f.type===s);
+    const badgeDetail=matchedFlag?matchedFlag.detail:'담당자가 직접 지정한 상태';
+    const trendBadgesHtml=s==='cooling'
+      ? `<span class="trend-badge-cool" title="${escHtml(badgeDetail)}">🌡 냉방효과미미</span>`
+      : s==='offlow'
+      ? `<span class="trend-badge-off" title="${escHtml(badgeDetail)}">❄ OFF인데 저온</span>`
+      : s==='runlow'
+      ? `<span class="trend-badge-runlow" title="${escHtml(badgeDetail)}">❄ 가동중 저온</span>`
+      : '';
+    const t=parseTemp(ac['실내온도']);
+    const dev=parseTemp(ac['온도편차']);
+    const tempCls=(s==='cooling'||s==='offlow'||s==='runlow')?'temp-high':'';
+    const devCls=dev!==null&&Math.abs(dev)>state.settings.devThreshold?'temp-warn':'';
+    const onoff=String(ac['ON / OFF']||'').trim().toUpperCase().replace(/\t/g,'');
+    const onBadge=onoff==='ON'?'<span class="on-badge">ON</span>':'<span class="off-badge">OFF</span>';
+    const aiTag=ac['AI 여부']&&ac['AI 여부']!=='-'?` <span class="tag">${ac['AI 여부']}</span>`:'';
+    const sNameEsc=sName.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const acKey=sName+'__'+(ac['매칭 컨트롤러 명']||ac['센서명']||'');
+    const acKeyEsc=acKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    const safeAcKey=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+    const detailOpen=state.openAcDetail[acKey];
+    const noteVal=state.dailyData[group.origIdx]?state.dailyData[group.origIdx]._note||'':ac._note||'';
+    acRows+=`<tr>
+      <td style="max-width:130px">
+        <div style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600" title="${escHtml(ac['매칭 컨트롤러 명']||ac['센서명']||'-')}">${ac['매칭 컨트롤러 명']||ac['센서명']||'-'}</div>
+        ${ac['센서명']?`<div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${escHtml(ac['센서명'])}">${ac['센서명']}</div>`:''}
+        ${trendBadgesHtml?`<div style="margin-top:3px;display:flex;flex-direction:column;gap:2px;align-items:flex-start">${trendBadgesHtml}</div>`:''}
+      </td>
+      <td style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px" title="${escHtml((ac['층']||'-')+' / '+(ac['공간']||'-'))}">${ac['층']||'-'} / ${ac['공간']||'-'}</td>
+      <td class="${tempCls}">
+        ${isMulti
+          ? readings.map(r=>{
+              const rt=parseTemp(r['실내온도']);
+              const rs=state.settings;
+              const rc=rt!==null&&(rt>=rs.highTemp||rt<rs.lowTemp)?'temp-high':parseTemp(r['온도편차'])!==null&&Math.abs(parseTemp(r['온도편차']))>rs.devThreshold?'temp-warn':'';
+              const rtime=r['시간']?String(r['시간']).substring(0,5):'';
+              const rsess=state.mergedMode&&r['분류']?String(r['분류']).substring(0,2):'';
+              const sessBadge=rsess?`<span style="font-size:9px;padding:1px 5px;border-radius:8px;margin-right:2px;background:${rsess==='오전'?'#e6f4ff':'#fff7e6'};color:${rsess==='오전'?'#185fa5':'#9a6000'};font-weight:600">${rsess}</span>`:'';
+              return `<div class="${rc}" style="white-space:nowrap;line-height:1.9">${sessBadge}<span style="font-size:10px;color:var(--text3)">${rtime}</span> ${r['실내온도']||'-'}</div>`;
+            }).join('')
+          : ac['실내온도']||'-'}
+      </td>
+      <td class="${devCls}">
+        ${isMulti
+          ? readings.map(r=>{
+              const dv=parseTemp(r['온도편차']);
+              const dc=dv!==null&&Math.abs(dv)>state.settings.devThreshold?'temp-warn':'';
+              const rsess2=state.mergedMode&&r['분류']?String(r['분류']).substring(0,2):'';
+              const sessBadge2=rsess2?`<span style="font-size:9px;padding:1px 5px;border-radius:8px;margin-right:2px;background:${rsess2==='오전'?'#e6f4ff':'#fff7e6'};color:${rsess2==='오전'?'#185fa5':'#9a6000'};font-weight:600">${rsess2}</span>`:'';
+              return `<div class="${dc}" style="white-space:nowrap;line-height:1.9">${sessBadge2}${r['온도편차']||'-'}</div>`;
+            }).join('')
+          : ac['온도편차']||'-'}
+      </td>
+      <td>${ac['평균온도']||'-'}</td>
+      <td>${onBadge}${aiTag}</td>
+      <td>${ac['설정 온도']||'-'}</td>
+      <td><select class="status-sel" onchange="updateStatus('${sNameEsc}',${group.origIdx},this.value)">
+        <option value="ok" ${s==='ok'?'selected':''}>✓ 정상</option>
+        <option value="cooling" ${s==='cooling'?'selected':''}>🌡 냉방효과미미</option>
+        <option value="offlow" ${s==='offlow'?'selected':''}>❄ OFF인데 저온</option>
+        <option value="runlow" ${s==='runlow'?'selected':''}>❄ 가동중 저온</option>
+      </select></td>
+      <td class="note-cell">
+        <textarea class="note-input" rows="1" placeholder="특이사항..." oninput="updateNote('${sNameEsc}',${group.origIdx},this.value)">${escHtml(noteVal)}</textarea>
+        <select style="width: 100%; font-size: 11px; margin-top: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 4px;" onchange="if(this.value){ const tx=this.previousElementSibling; tx.value=this.value; updateNote('${sNameEsc}',${group.origIdx},this.value); this.value=''; }">
+          <option value="">-- 자주 쓰는 특이사항 선택 --</option>
+          ${(state.settings.quickNotes || []).map(n => '<option value="' + escHtml(n) + '">' + escHtml(n) + '</option>').join('')}
+        </select>
+      </td>
+      <td><button class="expand-ac-btn" onclick="toggleAcDetail('${acKeyEsc}','${sNameEsc}',${group.origIdx})">${detailOpen?'▲ 닫기':'▼ 기록'}</button></td>
+    </tr>`;
+    if(detailOpen){
+      if(!state.ctrlLogs[acKey])state.ctrlLogs[acKey]=[];
+  const logs=state.ctrlLogs[acKey];
+      const patNote=ac._patternNote||'';
+      acRows+=`<tr class="ac-detail-row" id="detail-row-${safeAcKey}">
+        <td class="ac-detail-cell" id="detail-cell-${safeAcKey}" colspan="10">
+          <div class="detail-section">
+            <div class="detail-label">📋 제어 이력 · 가동 타임라인</div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+              <span style="font-size:11px;color:var(--text2)">현재 기록 시각</span>
+              <input type="text" id="record-time-${safeAcKey}" value="${state.recordTime&&state.recordTime[safeAcKey]||''}"
+                placeholder="1600" maxlength="5" style="width:64px;padding:3px 6px;border:1px solid var(--border);border-radius:4px;font-size:12px;text-align:center;background:var(--surface);color:var(--text)"
+                oninput="fmtRecordTime(this,'${acKeyEsc}')">
+              <button class="btn btn-sm" style="padding: 2px 6px; font-size: 11px; margin-left: 4px; vertical-align: middle;" onclick="setCurrentRecordTime('${acKeyEsc}')">🕒 현재시각</button>
+              <span style="font-size:11px;color:var(--text2)">← 기록 시각 (가동시간 자동계산)</span>
+            </div>
+            <div class="ctrl-history-panel" id="ctrl-panel-${safeAcKey}">
+              <div style="font-size:12px;color:var(--text3);padding:4px 0">불러오는 중...</div>
+            </div>
+            <button class="add-log-btn" onclick="addLog('${acKeyEsc}')">+ 이력 추가</button>
+          </div>
+          <div class="detail-section" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+            <div class="detail-label">✍ 사유 입력</div>
+            <textarea class="pattern-note" placeholder="사유를 입력하세요..." rows="2" oninput="updatePatternNote('${sNameEsc}',${group.origIdx},this.value)">${escHtml(patNote)}</textarea>
+            <select style="width: 100%; font-size: 11px; margin-top: 4px; padding: 3px; border: 1px solid var(--border); border-radius: 4px;" onchange="if(this.value){ const tx=this.previousElementSibling; tx.value=this.value; updatePatternNote('${sNameEsc}',${group.origIdx},this.value); this.value=''; }">
+              <option value="">-- 자주 쓰는 사유 선택 --</option>
+              ${(state.settings.quickReasons || []).map(r => '<option value="' + escHtml(r) + '">' + escHtml(r) + '</option>').join('')}
+            </select>
+          </div>
+          <div class="detail-section" style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">
+            <div class="detail-label">📈 온도 추이 입력</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+              <button class="add-log-btn" onclick="addTrendPoint('${acKeyEsc}')" style="margin-top:0">+ 행 추가</button>
+              <button class="add-log-btn" onclick="addIntervalTrendPoints('${acKeyEsc}')" style="margin-top:0;border-color:#4a9c7a;color:#2e7d5a" title="06:00부터 기록시각까지 3시간 간격으로 행 자동 추가">⏱ 3시간 간격 자동 입력</button>
+            </div>
+            <div id="trend-rows-${safeAcKey}" style="margin-bottom:6px"></div>
+            <div style="display:flex;gap:10px;align-items:flex-start">
+              <svg id="trend-svg-${safeAcKey}" viewBox="0 0 180 90" style="width:180px;height:90px;flex-shrink:0;border:1px solid var(--border);border-radius:4px;background:var(--surface2)">
+                <text x="90" y="50" text-anchor="middle" font-size="9" fill="#aaa">2개 이상 입력 시 표시</text>
+              </svg>
+              <div id="trend-summary-${safeAcKey}" style="font-size:12px;color:var(--text2)"></div>
+            </div>
+          </div>
+        </td>
+      </tr>`;
+    }
+  });
+  const totalAcs=Object.keys(acGroups).length;
+  const multiCount=Object.values(acGroups).filter(g=>g.readings.length>1).length;
+  const multiTag=multiCount>0?`<span style="font-size:11px;color:var(--text3);background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:1px 7px">${multiCount}대 중복측정</span>`:'';
+  const metaStr=issueTotal>0?`<span class="badge badge-danger" style="font-size:11px">${issueTotal}대 이상징후</span>`:'';
+  return `<div class="store-block">
+    <div class="store-head" onclick="toggleStore('${sName.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}')">
+      <span class="store-name">${sName}</span>
+      <span class="store-meta">에어컨 ${totalAcs}대${sessionInfo}${timeInfo}</span>
+      ${multiTag}
+      <span id="meta-badge-${safe}">${metaStr}</span>
+      <span class="badge ${bdCls}" id="st-badge-${safe}">${bdTxt}</span>
+      <span class="chevron ${isOpen?'open':''}" id="chev-${safe}">▶</span>
+    </div>
+    <div class="ac-panel ${isOpen?'open':''}" id="panel-${safe}">
+      <table class="ac-table">
+        <thead><tr>
+          <th>에어컨 (컨트롤러)</th><th>층/공간</th><th>실내온도</th><th>온도편차</th><th>평균온도</th><th>ON/OFF · AI</th><th>설정온도</th><th>상태</th><th>특이사항</th><th style="min-width:80px">제어·추이</th>
+        </tr></thead>
+        <tbody>${acRows}</tbody>
+      </table>
+    </div>
+  </div>`;
+}
+function showStoreDetail(storeName){
+  state.detailStore=storeName;
+  const panel=document.getElementById('store-detail-panel');
+  if(!panel)return;
+  const todayRow=state.dailyData.find(r=>r['점포 명']===storeName);
+  const brand=todayRow?getBrand(todayRow):getBrand(storeName);
+  const histRows=state.history.filter(r=>r['점포 명']===storeName)
+    .map(r=>({...r,'날짜':parseExcelDate(r['날짜'])}))
+    .sort((a,b)=>(a['날짜']<b['날짜']?1:a['날짜']>b['날짜']?-1:0));
+  const byDate={};
+  histRows.forEach(r=>{
+    const t=parseTemp(r['실내온도']);
+    if(t===null)return;
+    if(!byDate[r['날짜']])byDate[r['날짜']]=[];
+    byDate[r['날짜']].push(t);
+  });
+  const dates=Object.keys(byDate).sort().slice(-30);
+  let chartHtml='<div class="empty" style="padding:16px">히스토리가 아직 없습니다. "저장 + 엑셀 내보내기"로 저장하면 다음부터 추이가 표시돼요.</div>';
+  if(dates.length){
+    const s=state.settings;
+    const allTemps=dates.flatMap(d=>byDate[d]);
+    const minT=Math.min(...allTemps)-1,maxT=Math.max(...allTemps)+1;
+    const W=680,H=170,PL=36,PR=16,PT=12,PB=26;
+    const cW=W-PL-PR,cH=H-PT-PB;
+    const xPos=i=>PL+i*(cW/Math.max(dates.length-1,1));
+    const yPos=t=>PT+cH-(((t-minT)/(maxT-minT||1))*cH);
+    let grid='';
+    for(let i=0;i<=3;i++){
+      const t=minT+i*(maxT-minT)/3;const y=yPos(t);
+      grid+=`<line x1="${PL}" y1="${y}" x2="${W-PR}" y2="${y}" stroke="#e0ded8" stroke-width="0.5"/><text x="${PL-5}" y="${y+3}" text-anchor="end" font-size="9" fill="#9a9a95">${t.toFixed(0)}°</text>`;
+    }
+    let xLabels='';
+    const step=Math.max(1,Math.ceil(dates.length/7));
+    dates.forEach((d,i)=>{if(i%step===0||i===dates.length-1)xLabels+=`<text x="${xPos(i)}" y="${H-PB+14}" text-anchor="middle" font-size="9" fill="#9a9a95">${d.substring(5)}</text>`;});
+    let path='',dots='';
+    dates.forEach((d,i)=>{
+      const vals=byDate[d];const avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+      const x=xPos(i),y=yPos(avg);
+      path+=(path===''?'M':'L')+x+','+y+' ';
+      const col=(avg>=s.highTemp||avg<s.lowTemp)?'#c0392b':'#185fa5';
+      dots+=`<circle cx="${x}" cy="${y}" r="3" fill="${col}" stroke="#fff" stroke-width="1.3"/>`;
+    });
+    chartHtml=`<svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto">${grid}<path d="${path}" fill="none" stroke="#185fa5" stroke-width="1.6"/>${dots}${xLabels}</svg>`;
+  }
+  const histTableRows=histRows.slice(0,30).map(r=>{
+    const t=parseTemp(r['실내온도']);
+    const s=state.settings;
+    const cls=t!==null&&(t>=s.highTemp||t<s.lowTemp)?'temp-high':'';
+    return `<tr><td>${r['날짜']||'-'} ${String(r['분류']||'').substring(0,2)}</td><td>${escHtml(r['매칭 컨트롤러 명']||r['센서명']||'-')}</td><td class="${cls}">${escHtml(r['실내온도']||'-')}</td><td>${escHtml(r['온도편차']||'-')}</td><td>${escHtml(r['ON / OFF']||'-')}</td><td style="font-size:12px;color:var(--text2)">${escHtml(r['비고']||'')}</td></tr>`;
+  }).join('');
+  panel.innerHTML=`<div class="detail-panel-card">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+      <div style="font-size:15px;font-weight:700">${escHtml(storeName)} <span class="brand-chip">${escHtml(brand)}</span></div>
+      <button class="btn btn-sm" onclick="closeStoreDetail()">✕ 닫기</button>
+    </div>
+    <div style="font-size:12px;color:var(--text2);margin-bottom:8px">최근 30일 온도 추이 (일별 평균 · 빨간 점은 고온/저온 이상 기준 초과)</div>
+    ${chartHtml}
+    <div style="margin-top:14px;font-size:13px;font-weight:600">최근 기록 (히스토리 ${histRows.length}건 중 최대 30건)</div>
+    <div class="hist-wrap" style="max-height:280px;margin-top:6px">
+      <table class="hist-table"><thead><tr><th>날짜·세션</th><th>에어컨</th><th>실내온도</th><th>편차</th><th>ON/OFF</th><th>비고</th></tr></thead>
+      <tbody>${histTableRows||'<tr><td colspan="6" style="text-align:center;color:var(--text2);padding:16px">저장된 히스토리가 없습니다</td></tr>'}</tbody></table>
+    </div>
+  </div>`;
+  panel.scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+function closeStoreDetail(){
+  state.detailStore=null;
+  const panel=document.getElementById('store-detail-panel');
+  if(panel)panel.innerHTML='';
+}
+function onNoteSearchInput(el){
+  state.noteFilter=el.value;
+  renderBrandNotes();
+  setTimeout(()=>{
+    const e2=document.getElementById('note-search');
+    if(e2){e2.focus();e2.selectionStart=e2.selectionEnd=e2.value.length;}
+  },0);
+}
+function toggleBrandGroup(brand){
+  state.openBrands[brand]=!(state.openBrands[brand]!==false);
+  renderBrandNotes();
+}
+function saveStoreNote(el){
+  const sName=el.getAttribute('data-store');
+  const noteObj={text:el.value,updatedAt:new Date().toISOString()};
+  state.storeNotes[sName]=noteObj;
+  localStorage.setItem(LS_KEY_STORENOTES,JSON.stringify(state.storeNotes));
+  if(typeof storeNotesRef!=='undefined'&&storeNotesRef){
+    storeNotesRef.child(fbSafeKey(sName)).set({store:sName,text:noteObj.text,updatedAt:noteObj.updatedAt})
+      .catch(e=>console.error('특이사항 동기화 오류:',e));
+  }
+  const meta=el.parentElement.querySelector('.note-meta span');
+  if(meta)meta.textContent='수정: '+new Date().toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'});
+}
+function renderBrandNotes(){
+  const el=document.getElementById('brand-notes-section');
+  if(!el)return;
+  const storesInData=state.dailyData.map(r=>r['점포 명']);
+  const storesInNotes=Object.keys(state.storeNotes);
+  const allStores=[...new Set([...storesInData,...storesInNotes])].filter(Boolean);
+  if(!allStores.length){el.innerHTML='';return;}
+  const byBrand={};
+  allStores.forEach(sName=>{
+    const row=state.dailyData.find(r=>r['점포 명']===sName);
+    const brand=row?getBrand(row):getBrand(sName);
+    (byBrand[brand]=byBrand[brand]||[]).push(sName);
+  });
+  const anomalyStores=new Set(collectAnomalies().map(a=>a.store));
+  const q=state.noteFilter||'';
+  const groupsHtml=Object.keys(byBrand).sort((a,b)=>a.localeCompare(b,'ko')).map(brand=>{
+    let stores=[...new Set(byBrand[brand])].sort((a,b)=>a.localeCompare(b,'ko'));
+    if(q)stores=stores.filter(s=>s.includes(q));
+    if(!stores.length)return '';
+    const isOpen=state.openBrands[brand]!==false;
+    const issueCount=stores.filter(s=>anomalyStores.has(s)).length;
+    const cards=stores.map(sName=>{
+      const note=state.storeNotes[sName]||{text:'',updatedAt:null};
+      const hasIssue=anomalyStores.has(sName);
+      const updated=note.updatedAt?new Date(note.updatedAt).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'';
+      return `<div class="note-card2">
+        <div style="margin-bottom:6px"><span class="store-link" onclick="showStoreDetail('${jsEsc(sName)}')" style="font-size:13px">${escHtml(sName)}${hasIssue?' 🔶':''}</span></div>
+        <textarea data-store="${escHtml(sName)}" onfocusout="saveStoreNote(this)" placeholder="특이사항을 기록하세요...">${escHtml(note.text||'')}</textarea>
+        <div class="note-meta"><span>${updated?'수정: '+updated:'기록 없음'}</span></div>
+      </div>`;
+    }).join('');
+    return `<div class="brand-group">
+      <div class="brand-group-head" onclick="toggleBrandGroup('${jsEsc(brand)}')">
+        <span>${isOpen?'▾':'▸'}</span><span>${escHtml(brand)}</span>
+        <span style="font-weight:400;color:var(--text2);font-size:12px">매장 ${stores.length}개${issueCount?` · 이상 ${issueCount}개`:''}</span>
+      </div>
+      <div class="brand-group-body${isOpen?' open':''}">${cards}</div>
+    </div>`;
+  }).join('');
+  el.innerHTML=`<div class="sec-title">📝 매장별 특이사항 (브랜드별)</div>
+    <input type="text" id="note-search" placeholder="매장명 검색..." value="${escHtml(q)}" oninput="onNoteSearchInput(this)" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:8px;font-size:13px;margin-bottom:6px">
+    <div style="font-size:12px;color:var(--text2);margin-bottom:12px">작성한 내용은 브라우저에 자동 저장되며, 다음에 새 파일을 업로드해도 유지됩니다.</div>
+    ${groupsHtml||'<div class="empty">조건에 맞는 매장이 없습니다</div>'}`;
+}
+function toggleStore(name){
+  Object.keys(state.openAcDetail).forEach(acKey=>{
+    if(state.openAcDetail[acKey])collectDetailInputs(acKey);
+  });
+  saveDailyWork();
+  state.openStores[name]=!state.openStores[name];
+  const safe=name.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const panel=document.getElementById('panel-'+safe);
+  const chev=document.getElementById('chev-'+safe);
+  if(panel)panel.classList.toggle('open',!!state.openStores[name]);
+  if(chev)chev.classList.toggle('open',!!state.openStores[name]);
+}
+function updateStatus(sName,origIdx,val){
+  let acKey='';
+  if(state.dailyData[origIdx]&&state.dailyData[origIdx]['점포 명']===sName){
+    acKey=String(state.dailyData[origIdx]['매칭 컨트롤러 명']||state.dailyData[origIdx]['센서명']||'');
+  }
+  const isIssueVal=(v)=>v==='cooling'||v==='offlow'||v==='runlow';
+  if(acKey){
+    state.dailyData.forEach(r=>{
+      if(r['점포 명']===sName&&String(r['매칭 컨트롤러 명']||r['센서명']||'')===acKey){
+        r._status=val;
+        r._manualStatus=true;
+        if(isIssueVal(val) && !r._note && !r._patternNote) {
+          for (let i = state.history.length - 1; i >= 0; i--) {
+            const h = state.history[i];
+            if (h['점포 명'] === sName && String(h['매칭 컨트롤러 명'] || '').trim() === acKey.trim()) {
+              if (h['비고']) r._note = h['비고'];
+              if (h['추이패턴']) r._patternNote = h['추이패턴'];
+              break;
+            }
+          }
+        }
+      }
+    });
+  } else {
+    if(state.dailyData[origIdx]&&state.dailyData[origIdx]['점포 명']===sName){
+      state.dailyData[origIdx]._status=val;
+      state.dailyData[origIdx]._manualStatus=true;
+      const fallbackAcKey = String(state.dailyData[origIdx]['매칭 컨트롤러 명']||state.dailyData[origIdx]['센서명']||'');
+      if(isIssueVal(val) && !state.dailyData[origIdx]._note && !state.dailyData[origIdx]._patternNote) {
+        for (let i = state.history.length - 1; i >= 0; i--) {
+          const h = state.history[i];
+          if (h['점포 명'] === sName && String(h['매칭 컨트롤러 명'] || '').trim() === fallbackAcKey.trim()) {
+            if (h['비고']) state.dailyData[origIdx]._note = h['비고'];
+            if (h['추이패턴']) state.dailyData[origIdx]._patternNote = h['추이패턴'];
+            break;
+          }
+        }
+      }
+    } else {
+      let i=0;
+      for(let j=0;j<state.dailyData.length;j++){
+        if(state.dailyData[j]['점포 명']===sName){
+          if(i===origIdx){
+            state.dailyData[j]._status=val;
+            state.dailyData[j]._manualStatus=true;
+            const fallbackAcKey = String(state.dailyData[j]['매칭 컨트롤러 명']||state.dailyData[j]['센서명']||'');
+            if(isIssueVal(val) && !state.dailyData[j]._note && !state.dailyData[j]._patternNote) {
+              for (let k = state.history.length - 1; k >= 0; k--) {
+                const h = state.history[k];
+                if (h['점포 명'] === sName && String(h['매칭 컨트롤러 명'] || '').trim() === fallbackAcKey.trim()) {
+                  if (h['비고']) state.dailyData[j]._note = h['비고'];
+                  if (h['추이패턴']) state.dailyData[j]._patternNote = h['추이패턴'];
+                  break;
+                }
+              }
+            }
+            break;
+          }
+          i++;
+        }
+      }
+    }
+  }
+  renderDaily();
+  saveDailyWork();
+}
+function updateStoreBadge(sName){
+  const safe=sName.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const rows=state.dailyData.filter(r=>r['점포 명']===sName);
+  const acStatus={};
+  rows.forEach(r=>{
+    const k=r['매칭 컨트롤러 명']||r['센서명']||'';
+    const rs=r._status||'ok';
+    if(!acStatus[k]||rs!=='ok'){
+      acStatus[k]=rs;
+    }
+  });
+  const statuses=Object.values(acStatus);
+  const issueCnt=statuses.filter(s=>s==='cooling'||s==='offlow'||s==='runlow').length;
+  const st=issueCnt>0?'danger':'ok';
+  const stBadge=document.getElementById('st-badge-'+safe);
+  if(stBadge){
+    stBadge.className='badge '+(st==='danger'?'badge-danger':'badge-ok');
+    stBadge.textContent=st==='danger'?'이상':'정상';
+  }
+  const metaWrap=document.getElementById('meta-badge-'+safe);
+  if(metaWrap){
+    metaWrap.innerHTML=issueCnt>0?`<span class="badge badge-danger" style="font-size:11px">${issueCnt}대 이상징후</span>`:'';
+  }
+}
+function updateNote(sName,origIdx,val){
+  let acKey='';
+  if(state.dailyData[origIdx]&&state.dailyData[origIdx]['점포 명']===sName){
+    acKey=String(state.dailyData[origIdx]['매칭 컨트롤러 명']||state.dailyData[origIdx]['센서명']||'');
+  }
+  if(acKey){
+    state.dailyData.forEach(r=>{
+      if(r['점포 명']===sName&&String(r['매칭 컨트롤러 명']||r['센서명']||'')===acKey){
+        r._note=val;
+      }
+    });
+  } else {
+    if(state.dailyData[origIdx]&&state.dailyData[origIdx]['점포 명']===sName){
+      state.dailyData[origIdx]._note=val;
+    }
+  }
+  saveDailyWork();
+}
+function toggleAcDetail(acKey,sName,idx){
+  collectDetailInputs(acKey);
+  state.openAcDetail[acKey]=!state.openAcDetail[acKey];
+  renderDaily();
+  requestAnimationFrame(()=>{
+    Object.keys(state.openAcDetail).forEach(k=>{
+      if(state.openAcDetail[k]){
+        renderCtrlLogs(k);
+        renderTrendRows(k);
+      }
+    });
+  });
+}
+function collectDetailInputs(acKey){
+  const safeAcKey=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const cell=document.getElementById('detail-cell-'+safeAcKey);
+  if(!cell)return;
+  const patEl=cell.querySelector('.pattern-note');
+  if(patEl){
+    const sName=acKey.split('__')[0];
+    for(let j=0;j<state.dailyData.length;j++){
+      if(state.dailyData[j]['점포 명']===sName){
+        state.dailyData[j]._patternNote=patEl.value;
+        break;
+      }
+    }
+  }
+  saveDailyWork();
+}
+function addLog(acKey){
+  if(!state.ctrlLogs[acKey])state.ctrlLogs[acKey]=[];
+  const prev=state.ctrlLogs[acKey];
+  let defEvent='on';
+  if(prev.length>0){
+    const last=prev[prev.length-1];
+    defEvent=last.event==='off'?'on':'change';
+  }
+  const prevEndTemp=prev.length>0?prev[prev.length-1].endTemp||'':'';
+  state.ctrlLogs[acKey].push({time:'',event:defEvent,temp:'',mode:'cool',power:'mid',ctrlType:'ai',startTemp:prevEndTemp,endTemp:'',memo:''});
+  renderCtrlLogs(acKey);
+  saveDailyWork();
+}
+function fmtRecordTime(el, acKeyEsc){
+  let v=el.value.replace(/[^0-9]/g,'');
+  if(v.length>4)v=v.slice(0,4);
+  let display=v;
+  if(v.length>2)display=v.slice(0,2)+':'+v.slice(2);
+  el.value=display;
+  if(!state.recordTime)state.recordTime={};
+  const safeKey=acKeyEsc.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  state.recordTime[safeKey]=v.length===4?display:'';
+  updateTimeline(acKeyEsc);
+  saveDailyWork();
+}
+function renderCtrlLogs(acKey){
+  const safeAcKey=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const cell=document.getElementById('detail-cell-'+safeAcKey);
+  if(!cell)return;
+  const panel=cell.querySelector('.ctrl-history-panel')||document.getElementById('ctrl-panel-'+safeAcKey);
+  if(!panel)return;
+  const logs=state.ctrlLogs[acKey]||[];
+  const acKeyEsc=acKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  logs.forEach((log,li)=>{
+    if(li>0&&!logs[li].startTemp&&logs[li-1].endTemp){
+      logs[li].startTemp=logs[li-1].endTemp;
+    }
+  });
+  const hdr=`<div class="ctrl-log-hdr">
+    <span style="width:62px">시각</span>
+    <span style="width:58px">이벤트</span>
+    <span style="width:52px">설정°C</span>
+    <span style="width:130px">모드 · 세기</span>
+    <span style="width:86px">제어 주체</span>
+  </div>`;
+  const rows=logs.map((log,li)=>{
+    const isOff=log.event==='off';
+    const isOn=log.event==='on';
+    const evCls=isOn?'event-on':isOff?'event-off':'event-change';
+    const startAutoFilled=li>0&&logs[li-1].endTemp&&log.startTemp===logs[li-1].endTemp;
+    return `<div class="ctrl-log-row">
+      <div class="ctrl-log-row-top">
+        <input class="ctrl-log-time" type="text" value="${log.time||''}" placeholder="1010" maxlength="5"
+          style="width:62px" oninput="fmtCtrlTime(this,'${acKeyEsc}',${li})">
+        <select class="ctrl-log-event ${evCls}" style="width:58px" oninput="updateLog('${acKeyEsc}',${li},'event',this.value);renderCtrlLogs('${acKeyEsc}')">
+          <option value="on" ${log.event==='on'?'selected':''}>▶ ON</option>
+          <option value="change" ${log.event==='change'?'selected':''}>⇄ 변경</option>
+          <option value="off" ${log.event==='off'?'selected':''}>■ OFF</option>
+        </select>
+        ${isOff
+          ?'<span style="width:52px;font-size:11px;color:var(--text3);text-align:center">—</span>'
+          :`<input class="ctrl-log-temp" type="number" step="0.5" value="${log.temp||''}" placeholder="°C"
+            style="width:52px" oninput="updateLog('${acKeyEsc}',${li},'temp',this.value)">`}
+        ${isOff
+          ?'<span style="width:130px;font-size:11px;color:var(--text3)">—</span>'
+          :`<div style="display:flex;gap:3px;width:130px">
+            <select class="ctrl-log-mode ${log.mode==='cool'?'mode-cool':log.mode==='heat'?'mode-heat':log.mode==='fan'?'mode-fan':''}" style="flex:1;min-width:0;font-size:11px" oninput="updateLog('${acKeyEsc}',${li},'mode',this.value);this.className='ctrl-log-mode '+(this.value==='cool'?'mode-cool':this.value==='heat'?'mode-heat':this.value==='fan'?'mode-fan':'')">
+              <option value="cool" ${log.mode==='cool'?'selected':''}>냉방</option>
+              <option value="heat" ${log.mode==='heat'?'selected':''}>난방</option>
+              <option value="fan"  ${log.mode==='fan'?'selected':''}>송풍</option>
+            </select>
+            <select class="ctrl-log-power" style="width:46px" oninput="updateLog('${acKeyEsc}',${li},'power',this.value)">
+              <option value="low" ${log.power==='low'?'selected':''}>약</option>
+              <option value="mid" ${log.power==='mid'?'selected':''}>중</option>
+              <option value="high" ${log.power==='high'?'selected':''}>강</option>
+            </select>
+          </div>`}
+        <select class="ctrl-log-ctrltype" style="width:86px;font-size:11px" oninput="updateLog('${acKeyEsc}',${li},'ctrlType',this.value)">
+          <option value="ai" ${log.ctrlType==='ai'?'selected':''}>AI</option>
+          <option value="manual" ${log.ctrlType==='manual'?'selected':''}>수동</option>
+        </select>
+        <button class="ctrl-log-del" onclick="deleteLog('${acKeyEsc}',${li})" style="margin-left:auto">×</button>
+      </div>
+      <div class="ctrl-log-row-bot">
+        <span style="font-size:11px;color:var(--text2);margin-right:4px">온도변화</span>
+        <input type="number" step="0.1" value="${log.startTemp||''}" placeholder="시작°C"
+          class="${startAutoFilled?'auto-filled':''}"
+          style="width:64px" oninput="updateLog('${acKeyEsc}',${li},'startTemp',this.value)">
+        <span style="color:var(--text3);font-size:12px">→</span>
+        <input type="number" step="0.1" value="${log.endTemp||''}" placeholder="종료°C"
+          style="width:64px" oninput="updateLogEnd('${acKeyEsc}',${li},this.value)">
+        <input type="text" value="${log.memo||''}" placeholder="메모 (선택)"
+          style="flex:1;min-width:80px" oninput="updateLog('${acKeyEsc}',${li},'memo',this.value)">
+      </div>
+    </div>`;
+  }).join('');
+  const safeKeyR=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const recTime=(state.recordTime&&state.recordTime[safeKeyR])||'';
+  panel.innerHTML=(logs.length?hdr+rows:'<div style="font-size:12px;color:var(--text3);padding:4px 0">+ 아래 버튼으로 제어 이력을 추가하세요</div>')
+    +renderTimeline(logs, recTime);
+}
+function updateLogEnd(acKey,li,val){
+  updateLog(acKey,li,'endTemp',val);
+  const logs=state.ctrlLogs[acKey]||[];
+  if(logs[li+1]!==undefined){
+    logs[li+1].startTemp=val;
+    const safeAcKey=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+    const panel=document.getElementById('ctrl-panel-'+safeAcKey);
+    if(panel){
+      const rows=panel.querySelectorAll('.ctrl-log-row');
+      if(rows[li+1]){
+        const startInput=rows[li+1].querySelector('.ctrl-log-row-bot input:first-of-type');
+        if(startInput){
+          startInput.value=val;
+          startInput.classList.add('auto-filled');
+        }
+      }
+    }
+    updateTimeline(acKey);
+  }
+}
+function fmtCtrlTime(el,acKey,li){
+  let v=el.value.replace(/[^0-9]/g,'');
+  if(v.length>4)v=v.slice(0,4);
+  let display=v;
+  if(v.length>2)display=v.slice(0,2)+':'+v.slice(2);
+  el.value=display;
+  if(v.length===4){
+    const hh=v.slice(0,2),mm=v.slice(2,4);
+    if(parseInt(hh)<24&&parseInt(mm)<60){
+      updateLog(acKey,li,'time',display);
+    }
+  } else if(v.length===0){
+    updateLog(acKey,li,'time','');
+  }
+}
+function renderTimeline(logs, recordTime){
+  if(!logs.length)return'';
+  const modeKr={cool:'냉방',heat:'난방',fan:'송풍'};
+  const powerKr={low:'약',mid:'중',high:'강'};
+  const ctrlKr={ai:'AI',manual:'수동'};
+  const modeCol={cool:'#185fa5',heat:'#c0392b',fan:'#3b6d11'};
+  function toMin(t){if(!t)return null;const p=t.split(':');return parseInt(p[0]||0)*60+parseInt(p[1]||0);}
+  function fmtDur(min){if(min<=0)return'';const h=Math.floor(min/60),m=min%60;return h>0?(m>0?h+'시간 '+m+'분':h+'시간'):m+'분';}
+  function tStr(s,e){
+    const sv=parseFloat(s),ev=parseFloat(e);
+    if(isNaN(sv))return'';
+    if(isNaN(ev))return s+'°C 시작';
+    const d=(ev-sv).toFixed(1);
+    return s+'°C → '+e+'°C (<span style="color:'+(parseFloat(d)>0?'#c0392b':'#185fa5')+'">'+(parseFloat(d)>0?'+':'')+d+'°C</span>)';
+  }
+  let html='<div class="tl-wrap"><div style="font-size:10px;font-weight:500;color:var(--text2);margin-bottom:8px">가동 이력 타임라인 (자동 계산)</div>';
+  logs.forEach((log,li)=>{
+    const isOff=log.event==='off',isOn=log.event==='on',isChange=log.event==='change';
+    const prev=li>0?logs[li-1]:null;
+    const dotColor=isOn?'#1d9e75':isOff?'#c0392b':'#888';
+    let evLabel, settingHtml='';
+    if(isOn){
+      evLabel='ON';
+    } else if(isOff){
+      evLabel='OFF';
+    } else {
+      evLabel='설정 변경';
+    }
+    if(!isOff){
+      const isFan=log.mode==='fan';
+      const col=modeCol[log.mode]||'var(--text2)';
+      const modeStr=modeKr[log.mode]||'';
+      const pwStr=powerKr[log.power]||'';
+      const tempStr=!isFan&&log.temp?`<span style="font-weight:600">${log.temp}°C</span> `:'';
+      const modeSpan=modeStr?`<span style="color:${col}">${modeStr}</span> `:'';
+      const pwSpan=pwStr?`<span>${pwStr}</span> `:'';
+      settingHtml=(tempStr+modeSpan+pwSpan).trim();
+    }
+    const ctrl=log.ctrlType?`<span style="font-size:11px;color:var(--text2)">(${ctrlKr[log.ctrlType]||''})</span>`:'';
+    const thisMin=toMin(log.time);
+    const nextMin=li<logs.length-1?toMin(logs[li+1].time):null;
+    const dur=!isOff&&thisMin!==null&&nextMin!==null&&nextMin>thisMin?fmtDur(nextMin-thisMin):'';
+    const durCol=isOn?'background:#eaf3de;color:#3b6d11':'background:#f0f0f0;color:#666';
+    const recordMin=recordTime?toMin(recordTime):null;
+    const runDur=isRunning(li,logs)&&thisMin!==null&&recordMin!==null&&recordMin>thisMin&&!dur?fmtDur(recordMin-thisMin):'';
+    const totalDur=runDur||dur;
+    const runBadge=isRunning(li,logs)&&!log.endTemp
+      ?`<span style="font-size:10px;color:#1d9e75;background:#eaf3de;padding:1px 6px;border-radius:8px">${totalDur?totalDur+' 가동 중':'가동 중'}</span>`:'';
+    const recordDurStr=isRunning(li,logs)&&log.endTemp&&runDur?`<span style="font-size:10px;color:var(--text2);margin-left:4px">${runDur}</span>`:'';
+    const tc=tStr(log.startTemp,log.endTemp);
+    html+=`<div class="tl-row-item">
+      <div class="tl-dot" style="background:${dotColor}"></div>
+      <div class="tl-content">
+        <div class="tl-main">
+          <span style="font-weight:600;color:${dotColor}">${log.time||'?'}</span>
+          <span style="font-weight:500">${evLabel}</span>
+          ${settingHtml?`<span>${settingHtml}</span>`:''}
+          ${ctrl}
+          ${totalDur&&!runBadge?`<span class="tl-dur" style="${durCol}">${totalDur}</span>`:''}
+          ${runBadge}${recordDurStr}
+        </div>
+        ${tc?`<div class="tl-sub">${tc}</div>`:''}
+      </div>
+    </div>`;
+    if(li<logs.length-1)html+='<div class="tl-connector"></div>';
+  });
+  html+='</div>';
+  return html;
+}
+function isRunning(li,logs){
+  return logs[li].event!=='off'&&li===logs.length-1;
+}
+function updateLog(acKey,li,field,val){
+  if(!state.ctrlLogs[acKey])state.ctrlLogs[acKey]=[];
+  if(!state.ctrlLogs[acKey][li])state.ctrlLogs[acKey][li]={};
+  state.ctrlLogs[acKey][li][field]=val;
+  saveDailyWork();
+  updateTimeline(acKey);
+}
+function updateTimeline(acKey){
+  const safeAcKey=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const panel=document.getElementById('ctrl-panel-'+safeAcKey);
+  if(!panel)return;
+  const tl=panel.querySelector('.tl-wrap');
+  const safeKey2=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const recTime2=(state.recordTime&&state.recordTime[safeKey2])||'';
+  const newTl=document.createElement('div');
+  newTl.innerHTML=renderTimeline(state.ctrlLogs[acKey]||[], recTime2);
+  if(tl)tl.replaceWith(newTl.firstChild||newTl);
+  else panel.insertAdjacentHTML('beforeend',renderTimeline(state.ctrlLogs[acKey]||[], recTime2));
+}
+function deleteLog(acKey,li){
+  if(!state.ctrlLogs[acKey])return;
+  state.ctrlLogs[acKey].splice(li,1);
+  renderCtrlLogs(acKey);
+  saveDailyWork();
+}
+function updatePatternNote(sName,origIdx,val){
+  if(state.dailyData[origIdx]&&state.dailyData[origIdx]['점포 명']===sName){
+    state.dailyData[origIdx]._patternNote=val;
+  } else {
+    let i=0;
+    for(let j=0;j<state.dailyData.length;j++){
+      if(state.dailyData[j]['점포 명']===sName){if(i===origIdx){state.dailyData[j]._patternNote=val;break;}i++;}
+    }
+  }
+  saveDailyWork();
+}
+let autoSheetsSyncTimer = null;
+function showAutoSaveStatus(status){
+  const el = document.getElementById('auto-save-status');
+  if(!el) return;
+  const now = new Date();
+  const timeStr = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0') + ':' + String(now.getSeconds()).padStart(2,'0');
+  switch(status){
+    case 'saving':
+      el.textContent = '⏳ 구글 시트에 저장 중...';
+      el.style.color = 'var(--warn)';
+      break;
+    case 'success':
+      el.textContent = `✓ 구글 시트 동기화 완료 (${timeStr})`;
+      el.style.color = 'var(--ok)';
+      break;
+    case 'saved_local':
+      el.textContent = `✓ 자동 저장됨 (${timeStr}, 구글 시트 미연동)`;
+      el.style.color = 'var(--text2)';
+      break;
+    case 'error':
+      el.textContent = '⚠ 구글 시트 저장 실패';
+      el.style.color = 'var(--danger)';
+      break;
+    default:
+      el.textContent = '';
+  }
+}
+function triggerAutoSheetsSync(){
+  if(state.isViewMode || !state.dailyData.length) return;
+  clearTimeout(autoSheetsSyncTimer);
+  autoSheetsSyncTimer = setTimeout(async ()=>{
+    try {
+      const res = performHistorySave();
+      if(res && res.modifiedRows.length) {
+        saveToStorage();
+        updateHistDateList();
+        if(state.settings.sheetsUrl) {
+          showAutoSaveStatus('saving');
+          await pushToSheets(res.modifiedRows);
+          showAutoSaveStatus('success');
+        } else {
+          showAutoSaveStatus('saved_local');
+        }
+      }
+    } catch(e) {
+      console.error('실시간 자동 저장 및 구글 시트 업로드 실패:', e);
+      showAutoSaveStatus('error');
+    }
+  }, 5000);
+}
+function performHistorySave(){
+  if(state.isViewMode){return null;}
+  if(!state.dailyData.length){return null;}
+  Object.keys(state.openAcDetail).forEach(acKey=>{
+    if(state.openAcDetail[acKey])collectDetailInputs(acKey);
+  });
+  const manualDateEl = document.getElementById('manual-date');
+  const manualDate = manualDateEl ? manualDateEl.value : '';
+  const fileDate = state.dailyData.length && state.dailyData[0]['날짜'] ? parseExcelDate(state.dailyData[0]['날짜']) : null;
+  const today = manualDate || fileDate || getToday();
+  const session = document.getElementById('check-session').value;
+  let added = 0, updated = 0;
+  const modifiedRows = [];
+  state.dailyData.forEach(r=>{
+    const rowSession = state.mergedMode ? (r['분류']||session) : session;
+    const rowDate = manualDate ? manualDate : (state.mergedMode&&r['날짜'] ? parseExcelDate(r['날짜']) : today);
+    const dupIdx = state.history.findIndex(h=>
+      h['날짜']===rowDate &&
+      String(h['분류']||'').substring(0,2)===String(rowSession).substring(0,2) &&
+      h['점포 명']===r['점포 명'] &&
+      String(h['매칭 컨트롤러 명']||'').trim()===String(r['매칭 컨트롤러 명']||r['센서명']||'').trim()
+    );
+    const newRecord = {
+      '날짜':rowDate,'분류':rowSession,'점포 명':r['점포 명'],'층':r['층'],'공간':r['공간'],
+      '평균온도':r['평균온도'],'센서명':r['센서명'],'실내온도':r['실내온도'],'온도편차':r['온도편차'],
+      '매칭 컨트롤러 명':r['매칭 컨트롤러 명']||r['센서명']||'','ON / OFF':r['ON / OFF'],'AI 여부':r['AI 여부'],
+      '설정 온도':r['설정 온도'],'_status':r._status,'비고':r._note||'',
+      '추이패턴':r._patternNote||'',
+      '_recordTime':new Date().toTimeString().slice(0,5),
+      '온도추이':(()=>{
+        const logs=state.ctrlLogs[r['점포 명']+'__'+(r['매칭 컨트롤러 명']||r['센서명']||'')]||[];
+        return logs.filter(l=>l.event!=='off'&&(l.startTemp||l.endTemp))
+          .map(l=>[l.time,l.startTemp?l.startTemp+'°C':'',l.endTemp?'→ '+l.endTemp+'°C':''].filter(Boolean).join(' ')).join(' | ');
+      })(),
+      '제어이력':(()=>{
+        const logs=state.ctrlLogs[r['점포 명']+'__'+(r['매칭 컨트롤러 명']||r['센서명']||'')]||[];
+        if(!logs.length) return '';
+        const modeKr={cool:'냉방',heat:'난방',fan:'송풍'};
+        const powerKr={low:'약',mid:'중',high:'강'};
+        return logs.map(l=>{
+          if(l.event==='off') return l.time+' OFF';
+          return `${l.time} ${modeKr[l.mode]||''} ${l.temp||''} ${powerKr[l.power]||''}`.trim();
+        }).join(' -> ');
+      })(),
+      '메모':(()=>{
+        const logs=state.ctrlLogs[r['점포 명']+'__'+(r['매칭 컨트롤러 명']||r['센서명']||'')]||[];
+        return logs.map(l=>l.memo).filter(Boolean).join(' | ');
+      })()
+    };
+    if (dupIdx >= 0) {
+      state.history[dupIdx] = newRecord;
+      updated++;
+    } else {
+      state.history.push(newRecord);
+      added++;
+    }
+    modifiedRows.push(newRecord);
+  });
+  return { added, updated, modifiedRows };
+}
+function saveDaily(){
+  if(state.isViewMode){alert('조회 모드에서는 저장할 수 없습니다.\n↩ 오늘 데이터로 버튼을 눌러 돌아가세요.');return;}
+  if(!state.dailyData.length){alert('저장할 데이터가 없습니다.');return;}
+  clearTimeout(autoSheetsSyncTimer);
+  const res = performHistorySave();
+  if(!res || (res.added===0 && res.updated===0)){
+    alert('저장할 데이터가 없습니다.');return;
+  }
+  const msg = `✓ ${res.added}건 신규 추가, ${res.updated}건 덮어쓰기(수정) 완료`;
+  saveToStorage();
+  clearDailyWork();
+  updateHistDateList();
+  if(res.modifiedRows.length) {
+    showAutoSaveStatus('saving');
+    pushToSheets(res.modifiedRows).then(() => {
+      showAutoSaveStatus('success');
+    }).catch(() => {
+      showAutoSaveStatus('error');
+    });
+  }
+  alert(msg+'\n브라우저에 자동 저장되었습니다.');
+  exportXlsx();
+}
+function exportCSV(){
+  if(!state.dailyData.length){alert('내보낼 데이터가 없습니다.');return;}
+  const today=getToday();
+  const session=document.getElementById('check-session').value;
+  const hdr=['날짜','오전/오후','점포명','층','공간','에어컨(컨트롤러)','센서명','실내온도','온도편차','평균온도','ON/OFF','AI여부','설정온도','상태','특이사항'];
+  const rows=state.dailyData.map(r=>{
+    const stTxt=statusLabel(r._status);
+    return [today,session,r['점포 명'],r['층'],r['공간'],r['매칭 컨트롤러 명'],r['센서명'],r['실내온도'],r['온도편차'],r['평균온도'],r['ON / OFF'],r['AI 여부'],r['설정 온도'],stTxt,r._note||''];
+  });
+  const lines=[hdr,...rows].map(r=>r.map(v=>'"'+String(v||'').replace(/"/g,'""')+'"').join(','));
+  const csv='\uFEFF'+lines.join('\r\n');
+  const uri='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);
+  const a=document.createElement('a');
+  a.href=uri;
+  a.download='온습도_'+today+'_'+session+'.csv';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+function renderHistory(){
+  const q=(document.getElementById('h-store').value||'').trim();
+  const acQ=(document.getElementById('h-ac').value||'').trim();
+  const from=document.getElementById('h-from').value;
+  const to=document.getElementById('h-to').value;
+  const session=document.getElementById('h-session').value;
+  let h=state.history;
+  if(q)h=h.filter(r=>r['점포 명']&&r['점포 명'].includes(q));
+  if(acQ)h=h.filter(r=>(r['매칭 컨트롤러 명']||r['센서명']||'').includes(acQ));
+  if(from)h=h.filter(r=>r['날짜']>=from);
+  if(to)h=h.filter(r=>r['날짜']<=to);
+  if(session!=='all')h=h.filter(r=>String(r['분류']||'').startsWith(session));
+  document.getElementById('h-count').textContent=h.length.toLocaleString()+'건';
+  const body=document.getElementById('hist-body');
+  const disp=h.slice().reverse().slice(0,500);
+  if(!disp.length){body.innerHTML='<tr><td colspan="9" style="text-align:center;padding:2rem;color:var(--text3)">조건에 맞는 기록이 없습니다</td></tr>';return;}
+  const s=state.settings;
+  body.innerHTML=disp.map(r=>{
+    const t=parseTemp(r['실내온도']);
+    const dev=parseTemp(r['온도편차']);
+    const autoSt=t!==null&&(t>=s.highTemp||t<s.lowTemp)?'danger':dev!==null&&Math.abs(dev)>s.devThreshold?'warning':'ok';
+    const finalSt=r._status||autoSt;
+    const stCls=(finalSt==='danger'||finalSt==='cooling'||finalSt==='offlow'||finalSt==='runlow')?'badge-danger':finalSt==='warning'?'badge-warn':'badge-ok';
+    const stTxt=statusLabel(finalSt);
+    const tempCls=t!==null&&(t>=s.highTemp||t<s.lowTemp)?'temp-high':'';
+    const devCls=dev!==null&&Math.abs(dev)>s.devThreshold?'temp-warn':'';
+    let detailParts=[];
+    if(r['비고'])detailParts.push(`<span style="color:var(--text2)">${r['비고']}</span>`);
+    if(r['온도추이']){
+      let trendStr=r['온도추이'];
+      try{
+        const arr=JSON.parse(trendStr);
+        if(Array.isArray(arr)&&arr.length&&arr[0].time!==undefined){
+          trendStr=arr.map(p=>p.time+(p.temp!==undefined&&p.temp!==''?' '+parseFloat(p.temp).toFixed(1)+'°C':'')).join(' → ');
+        }
+      }catch(e){}
+      detailParts.push(`<span style="color:var(--text2)">📈 ${trendStr.replace(/\n/g,' → ')}</span>`);
+    }
+    if(r['메모']){
+      detailParts.push(`<span style="color:var(--text2)">📝 메모: ${r['메모']}</span>`);
+    }
+    if(r['제어이력']){
+      try{
+        const logs=JSON.parse(r['제어이력']||'[]');
+        const evL={on:'ON',change:'설정변경',off:'OFF'};
+        const mK={cool:'냉방',heat:'난방',fan:'송풍'};
+        const pK={low:'약',mid:'중',high:'강'};
+        const cK={ai:'AI',manual:'수동'};
+        if(logs.length){
+          const ctrlSummary=logs.map((l,li)=>{
+            const nextTime=li<logs.length-1?logs[li+1].time:'';
+            const isLast=li===logs.length-1;
+            const isRunning=isLast&&l.event!=='off';
+            const endTime=nextTime||(isRunning?r['_recordTime']||'':'');
+            const timeRange=l.time?(endTime?l.time+'~'+endTime:l.time):'';
+            const parts=[timeRange,evL[l.event]||''];
+            if(l.event!=='off'&&l.temp)parts.push(l.temp+'°C '+(mK[l.mode]||'')+' '+(pK[l.power]||''));
+            if(l.ctrlType)parts.push('('+cK[l.ctrlType]+')');
+            return parts.filter(Boolean).join(' ');
+          }).join(' → ');
+          detailParts.push(`<span style="color:var(--info);font-size:11px">📋 ${ctrlSummary}</span>`);
+        }
+      }catch{
+        if(r['제어이력']&&r['제어이력'].trim()&&r['제어이력']!=='[]')
+          detailParts.push(`<span style="color:var(--info);font-size:11px">📋 ${r['제어이력']}</span>`);
+      }
+    }
+    const detailHtml=detailParts.join('<br>');
+    return `<tr>
+      <td style="white-space:nowrap;font-size:12px">${parseExcelDate(r['날짜'])}</td>
+      <td style="font-size:12px">${String(r['분류']||'').substring(0,2)}</td>
+      <td style="font-weight:500;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r['점포 명']||''}">${r['점포 명']||''}</td>
+      <td style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${r['매칭 컨트롤러 명']||''}">${r['매칭 컨트롤러 명']||''}</td>
+      <td class="${tempCls}" style="font-size:13px">${r['실내온도']||'-'}</td>
+      <td class="${devCls}" style="font-size:12px">${r['온도편차']||'-'}</td>
+      <td style="font-size:12px">${r['ON / OFF']||'-'}</td>
+      <td><span class="badge ${stCls}">${stTxt}</span></td>
+      <td style="font-size:12px;line-height:1.6">${detailHtml||'-'}</td>
+    </tr>`;
+  }).join('');;
+}
+function clearHistFilter(){
+  ['h-store','h-ac','h-from','h-to'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('h-session').value='all';
+  renderHistory();
+}
+async function pushToSheets(rows){
+  const url=state.settings.sheetsUrl;
+  if(!url||!rows.length)return;
+  try{
+    await fetch(url,{
+      method:'POST',
+      mode:'no-cors',
+      body:JSON.stringify({action:'upsert',rows})
+    });
+  }catch(e){console.warn('Google Sheets 전송 오류:',e);}
+}
+async function loadFromSheets(){
+  const url=state.settings.sheetsUrl;
+  if(!url){alert('설정에서 Apps Script URL을 먼저 입력하세요.');return;}
+  const el=document.getElementById('restore-status');
+  el.textContent='구글 시트에서 불러오는 중...';
+  try{
+    const r=await fetch(url+'?action=getHistory',{signal:AbortSignal.timeout(15000)});
+    const rows=await r.json();
+    if(!Array.isArray(rows)||!rows.length){el.textContent='시트에 데이터가 없습니다.';return;}
+    let added=0;
+    rows.forEach(r=>{
+      const norm={
+        '날짜':parseExcelDate(r['날짜']),'분류':r['분류']||'','점포 명':r['점포 명']||'',
+        '층':r['층']||'','공간':r['공간']||'','평균온도':r['평균온도']||'',
+        '센서명':r['센서명']||'','실내온도':r['실내온도']||'','온도편차':r['온도편차']||'',
+        '매칭 컨트롤러 명':r['매칭 컨트롤러 명']||'','ON / OFF':r['ON / OFF']||'',
+        'AI 여부':r['AI 여부']||'','설정 온도':r['설정 온도']||'','비고':r['비고']||'',
+        '추이패턴':r['추이패턴']||'','온도추이':r['온도추이']||'',
+        '메모':r['메모']||'','제어이력':r['제어이력']||'',
+        '_status':r['_status']||'','_recordTime':r['_recordTime']||''
+      };
+      if(!norm['점포 명']||!norm['날짜'])return;
+      const isDup=state.history.some(h=>
+        h['날짜']===norm['날짜']&&String(h['분류']||'').substring(0,2)===String(norm['분류']||'').substring(0,2)&&
+        h['점포 명']===norm['점포 명']&&h['매칭 컨트롤러 명']===norm['매칭 컨트롤러 명']
+      );
+      if(!isDup){state.history.push(norm);added++;}
+    });
+    saveHistory();renderHistory();updateHistDateList();
+    el.textContent=`✓ 구글 시트에서 ${added}건 추가됨 (전체 ${rows.length}건)`;
+  }catch(e){el.textContent='✗ 불러오기 실패: '+e.message;}
+}
+function saveSheetsUrl(){
+  const url=(document.getElementById('s-sheets-url').value||'').trim();
+  state.settings.sheetsUrl=url;
+  localStorage.setItem(LS_KEY_SETTINGS,JSON.stringify(state.settings));
+  const btn=document.getElementById('btn-load-sheets');
+  if(btn)btn.style.display=url?'':'none';
+  const el=document.getElementById('sheets-status');
+  el.textContent='✓ URL 저장됨';el.style.color='var(--ok)';
+  setTimeout(()=>{el.textContent='';},2000);
+}
+async function testSheetsConnection(){
+  const url=state.settings.sheetsUrl;
+  const el=document.getElementById('sheets-status');
+  if(!url){el.textContent='URL을 먼저 입력하세요';el.style.color='var(--danger)';return;}
+  el.textContent='연결 중...';el.style.color='var(--text2)';
+  try{
+    const r=await fetch(url+'?action=ping',{signal:AbortSignal.timeout(8000)});
+    const d=await r.json();
+    if(d.ok){el.textContent='✓ 연결 성공';el.style.color='var(--ok)';}
+    else{el.textContent='⚠ 응답 오류: '+JSON.stringify(d);el.style.color='var(--danger)';}
+  }catch(e){el.textContent='✗ 연결 실패: '+e.message;el.style.color='var(--danger)';}
+}
+function saveSettings(){
+  state.settings.highTemp=parseFloat(document.getElementById('s-high').value)||25;
+  state.settings.lowTemp=parseFloat(document.getElementById('s-low').value)||18;
+  state.settings.devThreshold=parseFloat(document.getElementById('s-dev').value)||1.5;
+  state.settings.autoJudge=document.getElementById('s-auto').checked;
+  const elCool=document.getElementById('s-coolsetmax');
+  const elDrop=document.getElementById('s-mindrop');
+  const elGap=document.getElementById('s-singlegap');
+  const elOff=document.getElementById('s-offlowmax');
+  const elRunLow=document.getElementById('s-runlowgap');
+  if(elCool)state.settings.coolSetMax=parseFloat(elCool.value)||19;
+  if(elDrop)state.settings.minDrop=parseFloat(elDrop.value)||1.0;
+  if(elGap)state.settings.singleGap=parseFloat(elGap.value)||6;
+  if(elOff)state.settings.offLowMax=parseFloat(elOff.value)||22;
+  if(elRunLow)state.settings.runLowGap=parseFloat(elRunLow.value)||3;
+  const elBrands=document.getElementById('s-brands');
+  if(elBrands)state.settings.brands=elBrands.value.split('\n').map(s=>s.trim()).filter(Boolean);
+  localStorage.setItem(LS_KEY_SETTINGS,JSON.stringify(state.settings));
+  const el=document.getElementById('settings-saved');
+  el.style.display='inline';
+  setTimeout(()=>el.style.display='none',2000);
+  const el2=document.getElementById('settings-saved2');
+  if(el2){el2.style.display='inline';setTimeout(()=>el2.style.display='none',2000);}
+  if(state.dailyData.length){syncAutoStatuses();updateStats();renderDaily();}
+}
+function addTrendPoint(acKey){
+  if(!state.trendPoints[acKey])state.trendPoints[acKey]=[];
+  state.trendPoints[acKey].push({time:'',temp:''});
+  renderTrendRows(acKey);
+}
+function addIntervalTrendPoints(acKey){
+  if(!state.trendPoints[acKey])state.trendPoints[acKey]=[];
+  const safeKey=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const recRaw=(state.recordTime&&state.recordTime[safeKey])||'';
+  let endMin=null;
+  if(recRaw&&recRaw.includes(':')){
+    const p=recRaw.split(':');
+    endMin=parseInt(p[0])*60+parseInt(p[1]||0);
+  } else {
+    const now=new Date();
+    endMin=now.getHours()*60+now.getMinutes();
+  }
+  const existing=new Set(state.trendPoints[acKey].map(p=>p.time).filter(Boolean));
+  let added=0;
+  for(let m=6*60; m<=endMin; m+=180){
+    const hh=String(Math.floor(m/60)).padStart(2,'0');
+    const mm=String(m%60).padStart(2,'0');
+    const tStr=hh+':'+mm;
+    if(!existing.has(tStr)){
+      state.trendPoints[acKey].push({time:tStr,temp:''});
+      existing.add(tStr);
+      added++;
+    }
+  }
+  state.trendPoints[acKey].sort((a,b)=>{
+    const toMin=t=>{if(!t)return9999;const p=t.split(':');return parseInt(p[0])*60+parseInt(p[1]||0);};
+    return toMin(a.time)-toMin(b.time);
+  });
+  renderTrendRows(acKey);
+  saveDailyWork();
+  if(added===0)alert('이미 모든 시각이 입력되어 있습니다.');
+}
+function delTrendPoint(acKey,li){
+  if(!state.trendPoints[acKey])return;
+  state.trendPoints[acKey].splice(li,1);
+  renderTrendRows(acKey);
+}
+function saveTrendTemp(acKey,li,val){
+  if(!state.trendPoints[acKey])state.trendPoints[acKey]=[];
+  if(!state.trendPoints[acKey][li])state.trendPoints[acKey][li]={};
+  state.trendPoints[acKey][li].temp=val;
+  saveDailyWork();
+  updateTrendDiff(acKey);
+  drawTrendChart(acKey);
+}
+function updateTrendPoint(acKey,li,field,val){
+  if(!state.trendPoints[acKey])state.trendPoints[acKey]=[];
+  if(!state.trendPoints[acKey][li])state.trendPoints[acKey][li]={};
+  state.trendPoints[acKey][li][field]=val;
+  saveDailyWork();
+  updateTrendDiff(acKey);
+  drawTrendChart(acKey);
+}
+function updateTrendDiff(acKey){
+  const pts=state.trendPoints[acKey]||[];
+  const safeAcKey=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const container=document.getElementById('trend-rows-'+safeAcKey);
+  if(!container)return;
+  const rows=container.querySelectorAll('.trend-row');
+  rows.forEach((row,i)=>{
+    const diffEl=row.querySelector('.trend-diff');
+    if(!diffEl)return;
+    const cur=parseFloat(pts[i]&&pts[i].temp||'');
+    const prev=i>0?parseFloat(pts[i-1]&&pts[i-1].temp||''):null;
+    if(isNaN(cur)||prev===null||isNaN(prev)){diffEl.textContent='';diffEl.className='trend-diff';return;}
+    const diff=(cur-prev).toFixed(2);
+    const cls=parseFloat(diff)>0?'trend-diff-rise':parseFloat(diff)<0?'trend-diff-fall':'trend-diff-same';
+    diffEl.textContent=(parseFloat(diff)>0?'+':'')+diff+'°C';
+    diffEl.className='trend-diff '+cls;
+  });
+}
+function fmtTrendTime(el,acKey,li){
+  let v=el.value.replace(/[^0-9]/g,'');
+  if(v.length>4)v=v.slice(0,4);
+  let display=v;
+  if(v.length>2)display=v.slice(0,2)+':'+v.slice(2);
+  el.value=display;
+  if(v.length===4){
+    const hh=v.slice(0,2),mm=v.slice(2,4);
+    if(parseInt(hh)<24&&parseInt(mm)<60)updateTrendPoint(acKey,li,'time',display);
+  } else if(v.length===0){
+    updateTrendPoint(acKey,li,'time','');
+  }
+}
+function renderTrendRows(acKey){
+  const pts=state.trendPoints[acKey]||[];
+  const safeId=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const container=document.getElementById('trend-rows-'+safeId);
+  if(!container)return;
+  const acKeyEsc=acKey.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  container.innerHTML=pts.map((p,i)=>{
+    const prev=i>0?parseFloat(pts[i-1].temp):null;
+    const cur=parseFloat(p.temp);
+    const diff=prev!==null&&!isNaN(cur)&&!isNaN(prev)?(cur-prev).toFixed(2):null;
+    const cls=diff===null?'':parseFloat(diff)>0?'trend-diff-rise':parseFloat(diff)<0?'trend-diff-fall':'trend-diff-same';
+    const diffStr=diff===null?'':(parseFloat(diff)>0?'+':'')+diff+'°C';
+    return `<div class="trend-row">
+      <input class="trend-time-input" type="text" value="${p.time||''}" placeholder="1300" maxlength="5" oninput="fmtTrendTime(this,'${acKeyEsc}',${i})" onkeydown="if(event.key==='Tab'){event.preventDefault();this.closest('.trend-row').querySelector('.trend-temp-input').focus();}">
+      <input class="trend-temp-input" type="number" step="0.01" placeholder="°C" value="${p.temp||''}" oninput="saveTrendTemp('${acKeyEsc}',${i},this.value)"  onkeydown="if(event.key==='Tab'&&!event.shiftKey){const next=this.closest('.trend-row').nextElementSibling;if(next){event.preventDefault();next.querySelector('.trend-time-input').focus();}}">
+      <span class="trend-diff ${cls}">${diffStr}</span>
+      <button class="ctrl-log-del" onclick="delTrendPoint('${acKeyEsc}',${i})">×</button>
+    </div>`;
+  }).join('');
+  drawTrendChart(acKey);
+}
+function drawTrendChart(acKey){
+  const safeId=acKey.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+  const svg=document.getElementById('trend-svg-'+safeId);
+  const sumEl=document.getElementById('trend-summary-'+safeId);
+  if(!svg)return;
+  const pts=(state.trendPoints[acKey]||[]).filter(p=>p.time&&p.temp!=='').map(p=>({time:p.time,temp:parseFloat(p.temp)})).filter(p=>!isNaN(p.temp));
+  if(pts.length<2){
+    svg.innerHTML='<text x="90" y="50" text-anchor="middle" font-size="9" fill="#aaa">2개 이상 입력 시 표시</text>';
+    if(sumEl)sumEl.innerHTML='';
+    return;
+  }
+  const W=180,H=90,PL=28,PR=8,PT=10,PB=22;
+  const temps=pts.map(p=>p.temp);
+  const minT=Math.min(...temps),maxT=Math.max(...temps),rng=maxT-minT||1;
+  const xp=i=>PL+i*(W-PL-PR)/(pts.length-1);
+  const yp=t=>PT+(H-PT-PB)*(1-(t-minT)/rng);
+  let path='';
+  pts.forEach((p,i)=>{path+=(i===0?'M':'L')+xp(i).toFixed(1)+','+yp(p.temp).toFixed(1)+' ';});
+  let dots='';
+  pts.forEach((p,i)=>{
+    const isMax=p.temp===Math.max(...temps);
+    const col=isMax?'#c0392b':'#185fa5';
+    dots+=`<circle cx="${xp(i).toFixed(1)}" cy="${yp(p.temp).toFixed(1)}" r="${isMax?4:3}" fill="${col}" stroke="white" stroke-width="1.5"/>`;
+  });
+  let xlabels='';
+  const step=Math.max(1,Math.ceil(pts.length/4));
+  pts.forEach((p,i)=>{
+    if(i%step===0||i===pts.length-1)
+      xlabels+=`<text x="${xp(i).toFixed(1)}" y="${H-2}" text-anchor="middle" font-size="8" fill="#aaa">${p.time.substring(0,5)}</text>`;
+  });
+  const ylabels=`<text x="${PL-3}" y="${PT+5}" text-anchor="end" font-size="8" fill="#aaa">${maxT.toFixed(1)}</text>`+
+    `<text x="${PL-3}" y="${H-PB+4}" text-anchor="end" font-size="8" fill="#aaa">${minT.toFixed(1)}</text>`;
+  svg.innerHTML=`
+    <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="#e0ded8" stroke-width="0.5"/>
+    <line x1="${PL}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" stroke="#e0ded8" stroke-width="0.5"/>
+    <path d="${path}" fill="none" stroke="#378add" stroke-width="1.5" stroke-linejoin="round"/>
+    ${dots}${xlabels}${ylabels}`;
+  if(sumEl){
+    const first=pts[0].temp,last=pts[pts.length-1].temp;
+    const diff=(last-first).toFixed(2);
+    const cls=parseFloat(diff)>0?'trend-diff-rise':parseFloat(diff)<0?'trend-diff-fall':'trend-diff-same';
+    sumEl.innerHTML=`<span style="display:block">${first.toFixed(2)}°C → <strong>${last.toFixed(2)}°C</strong></span>`+
+      `<span class="${cls}" style="display:block">${parseFloat(diff)>0?'+':''}${diff}°C</span>`+
+      `<span style="display:block;color:var(--text3)">최고 ${Math.max(...temps).toFixed(2)}°C</span>`;
+  }
+}
+function exportXlsx(){
+  try{
+    const wb=XLSX.utils.book_new();
+    const today=getToday();
+    const session=document.getElementById('check-session').value;
+    const modeKr={cool:'냉방',heat:'난방',fan:'송풍'};
+    const powerKr={low:'약',mid:'중',high:'강'};
+    const ctrlKr={ai:'AI',manual:'수동'};
+    const cols=['날짜','분류','점포 명','층','공간','평균온도','센서명','실내온도','온도편차','매칭 컨트롤러 명','ON / OFF','AI 여부','설정 온도','비고','추이패턴','온도추이','온도추이(시각별)','제어이력'];
+    const rows=state.history.map(r=>{
+      const trendDetail=(()=>{
+        try{
+          const pts=JSON.parse(r['_trendPoints']||'[]');
+          if(!Array.isArray(pts)||!pts.length)return'';
+          return pts.filter(p=>p.time&&p.temp!=='').map(p=>p.time+' '+parseFloat(p.temp).toFixed(1)+'°C').join(' → ');
+        }catch{return'';}
+      })();
+      return cols.map(c=>c==='온도추이(시각별)'?trendDetail:r[c]||'');
+    });
+    const ws=XLSX.utils.aoa_to_sheet([cols,...rows]);
+    ws['!cols']=[{wch:12},{wch:8},{wch:20},{wch:6},{wch:10},{wch:8},{wch:16},{wch:8},{wch:8},{wch:16},{wch:8},{wch:10},{wch:8},{wch:20},{wch:30},{wch:40},{wch:50},{wch:50}];
+    XLSX.utils.book_append_sheet(wb,ws,'누적시트');
+    if(state.dailyData.length){
+      const dcols=['날짜','분류','시간','점포 명','층','공간','평균온도','센서명','실내온도','온도편차','매칭 컨트롤러 명','ON / OFF','AI 여부','설정 온도','상태','특이사항'];
+      const drows=state.dailyData.map(r=>{
+        const t=r['시간'];
+        const tStr=(()=>{if(!t)return'';const n=parseFloat(t);if(!isNaN(n)&&n>0&&n<1){const tot=Math.round(n*1440);return String(Math.floor(tot/60)).padStart(2,'0')+':'+String(tot%60).padStart(2,'0');}return String(t).substring(0,5);})();
+        return [today,session,tStr,r['점포 명'],r['층'],r['공간'],r['평균온도'],r['센서명'],r['실내온도'],r['온도편차'],r['매칭 컨트롤러 명'],r['ON / OFF'],r['AI 여부'],r['설정 온도'],statusLabel(r._status),r._note||''];
+      });
+      const dws=XLSX.utils.aoa_to_sheet([dcols,...drows]);
+      dws['!cols']=[{wch:12},{wch:8},{wch:10},{wch:20},{wch:6},{wch:10},{wch:8},{wch:16},{wch:8},{wch:8},{wch:16},{wch:8},{wch:10},{wch:8},{wch:8},{wch:20}];
+      XLSX.utils.book_append_sheet(wb,dws,'일일 시트');
+    }
+    if(state.dailyData.length){
+      const tcols=['점포명','에어컨(컨트롤러)','층/공간','실내온도(시각별)','온도편차','평균온도','상태','특이사항','온도추이(시각별)','제어이력'];
+      const trows=[];
+      const storeMap={};
+      state.dailyData.forEach((r,origIdx)=>{
+        if(!storeMap[r['점포 명']])storeMap[r['점포 명']]=[];
+        storeMap[r['점포 명']].push({r,origIdx});
+      });
+      Object.entries(storeMap).forEach(([sName,items])=>{
+        const acGroups={};
+        items.forEach(({r,origIdx})=>{
+          const key=r['매칭 컨트롤러 명']||r['센서명']||origIdx;
+          if(!acGroups[key])acGroups[key]={origIdx,readings:[]};
+          acGroups[key].readings.push({r,origIdx});
+        });
+        Object.values(acGroups).forEach(group=>{
+          const last=group.readings[group.readings.length-1];
+          const ac=last.r;
+          const acKey=sName+'__'+(ac['매칭 컨트롤러 명']||ac['센서명']||'');
+          const orig=state.dailyData[group.origIdx];
+          const statusTxt=statusLabel(orig&&orig._status);
+          const tempStr=group.readings.map(({r})=>{
+            const t=r['시간'];
+            const tStr=(()=>{if(!t)return'';const n=parseFloat(t);if(!isNaN(n)&&n>0&&n<1){const tot=Math.round(n*1440);return String(Math.floor(tot/60)).padStart(2,'0')+':'+String(tot%60).padStart(2,'0');}return String(t).substring(0,5);})();
+            return (tStr?tStr+' ':'')+r['실내온도'];
+          }).join(' / ');
+          let trendTxt='';
+          try{const pts=(state.trendPoints[acKey]||[]).filter(p=>p.time&&p.temp!=='');if(pts.length)trendTxt=pts.map(p=>p.time+' '+parseFloat(p.temp).toFixed(2)+'°C').join(' → ');}catch(e){}
+          let ctrlTxt='', trendFromCtrl='';
+          try{
+            const logs=state.ctrlLogs[acKey]||[];
+            const evL={on:'ON',change:'변경',off:'OFF'};
+            if(logs.length){
+              ctrlTxt=logs.map(l=>{
+                const ev=evL[l.event]||'';
+                const s=l.event!=='off'&&l.temp?l.temp+'°C '+(modeKr[l.mode]||'')+' '+(powerKr[l.power]||''):'';
+                const ctrl=l.ctrlType?'('+ctrlKr[l.ctrlType]+')':'';
+                const memo=l.memo||'';
+                return [l.time,ev,s,ctrl,memo].filter(Boolean).join(' ');
+              }).join('\n');
+              const tPts=logs.filter(l=>l.event!=='off'&&(l.startTemp||l.endTemp))
+                .map(l=>[l.time,l.startTemp?l.startTemp+'°C':'',l.endTemp?'→ '+l.endTemp+'°C':''].filter(Boolean).join(' '));
+              if(tPts.length)trendFromCtrl=tPts.join('\n');
+            }
+          }catch(e){}
+          trows.push([sName,ac['매칭 컨트롤러 명']||ac['센서명']||'',(ac['층']||'')+' / '+(ac['공간']||''),tempStr,ac['온도편차']||'',ac['평균온도']||'',statusTxt,orig&&orig._note||'',trendFromCtrl||trendTxt,ctrlTxt]);
+        });
+      });
+      const tws=XLSX.utils.aoa_to_sheet([tcols,...trows]);
+      tws['!cols']=[{wch:20},{wch:18},{wch:14},{wch:22},{wch:10},{wch:10},{wch:8},{wch:20},{wch:40},{wch:50}];
+      XLSX.utils.book_append_sheet(wb,tws,'당일 매장 추이');
+    }
+    if(state.history.length){
+      const agCols=['점포 명','기간','측정 횟수','평균 온도(°C)','최고 온도(°C)','최저 온도(°C)','이상 횟수','주의 횟수','이상률(%)'];
+      const storeAgg={};
+      state.history.forEach(r=>{
+        const s=r['점포 명'];if(!s)return;
+        if(!storeAgg[s])storeAgg[s]={temps:[],dates:new Set(),danger:0,warning:0,ok:0};
+        const t=parseTemp(r['실내온도']);
+        if(t!==null)storeAgg[s].temps.push(t);
+        if(r['날짜'])storeAgg[s].dates.add(r['날짜']);
+        const st=reportBucket(r['_status']||(()=>{
+          const tv=parseTemp(r['실내온도']),dv=parseTemp(r['온도편차']),ss=state.settings;
+          return tv!==null&&(tv>=ss.highTemp||tv<ss.lowTemp)?'danger':dv!==null&&Math.abs(dv)>ss.devThreshold?'warning':'ok';
+        })());
+        if(st==='danger')storeAgg[s].danger++;else if(st==='warning')storeAgg[s].warning++;else storeAgg[s].ok++;
+      });
+      const agRows=Object.entries(storeAgg).sort((a,b)=>b[1].danger-a[1].danger).map(([name,d])=>{
+        const dates=[...d.dates].sort();
+        const avg=d.temps.length?(d.temps.reduce((a,b)=>a+b,0)/d.temps.length).toFixed(1):'';
+        const max=d.temps.length?Math.max(...d.temps).toFixed(1):'';
+        const min=d.temps.length?Math.min(...d.temps).toFixed(1):'';
+        const period=dates.length?(dates.length>1?dates[0]+' ~ '+dates[dates.length-1]:dates[0]):'';
+        const total=d.danger+d.warning+d.ok;
+        const rate=total?((d.danger/total)*100).toFixed(1)+'%':'';
+        return[name,period,total,avg?parseFloat(avg):'',max?parseFloat(max):'',min?parseFloat(min):'',d.danger,d.warning,rate];
+      });
+      const agws=XLSX.utils.aoa_to_sheet([agCols,...agRows]);
+      agws['!cols']=[{wch:22},{wch:24},{wch:10},{wch:14},{wch:14},{wch:14},{wch:10},{wch:10},{wch:10}];
+      XLSX.utils.book_append_sheet(wb,agws,'매장별 집계');
+    }
+    XLSX.writeFile(wb,'온습도_모니터링_'+today+'_'+session+'.xlsx');
+  }catch(e){
+    console.error('엑셀 저장 오류:',e);
+    alert('엑셀 저장 중 오류가 발생했습니다: '+e.message);
+  }
+}
+const LS_KEY_HISTORY='hvac_history_v1';
+const LS_KEY_SETTINGS='hvac_settings_v1';
+const LS_KEY_WORK='hvac_work_v1';
+const LS_KEY_STORENOTES='hvac_store_notes_v1';
+function loadFromStorage(){
+  try{
+    const savedSettings=localStorage.getItem(LS_KEY_SETTINGS);
+    if(savedSettings) state.settings={...state.settings,...JSON.parse(savedSettings)};
+    const setIf=(id,val)=>{const e=document.getElementById(id);if(e&&val!==undefined&&val!==null)e.value=val;};
+    setIf('s-high',state.settings.highTemp);
+    setIf('s-low',state.settings.lowTemp);
+    setIf('s-dev',state.settings.devThreshold);
+    setIf('s-coolsetmax',state.settings.coolSetMax);
+    setIf('s-mindrop',state.settings.minDrop);
+    setIf('s-singlegap',state.settings.singleGap);
+    setIf('s-offlowmax',state.settings.offLowMax);
+    setIf('s-runlowgap',state.settings.runLowGap);
+    const brandsEl=document.getElementById('s-brands');
+    if(brandsEl)brandsEl.value=(state.settings.brands||[]).join('\n');
+    const autoEl=document.getElementById('s-auto');
+    if(autoEl)autoEl.checked=state.settings.autoJudge!==false;
+    if(state.settings.sheetsUrl){
+      const inp=document.getElementById('s-sheets-url');
+      if(inp)inp.value=state.settings.sheetsUrl;
+      const btn=document.getElementById('btn-load-sheets');
+      if(btn)btn.style.display='';
+    }
+    if (!state.settings.quickReasons) {
+      state.settings.quickReasons = [
+        "오후 들어서 실내 온도 계속 급상승함",
+        "설정온도 대비 실내온도 초과 유지",
+        "바람 세기 약으로 가동 중",
+        "송풍 모드 가동 중",
+        "기기 OFF 상태"
+      ];
+    }
+    if (!state.settings.quickNotes) {
+      state.settings.quickNotes = [
+        "실외기 과열 의심으로 현장 점검 필요",
+        "필터 청소 주기 확인 필요",
+        "현장 확인 필요",
+        "기기 미작동 점검 요망"
+      ];
+    }
+    const reasonsTextarea = document.getElementById('s-quick-reasons');
+    const notesTextarea = document.getElementById('s-quick-notes');
+    if (reasonsTextarea) {
+      reasonsTextarea.value = (state.settings.quickReasons || []).join('\n');
+    }
+    if (notesTextarea) {
+      notesTextarea.value = (state.settings.quickNotes || []).join('\n');
+    }
+  }catch(e){console.error('설정 로드 오류:',e);}
+  try{
+    const savedNotes=localStorage.getItem(LS_KEY_STORENOTES);
+    if(savedNotes)state.storeNotes=JSON.parse(savedNotes);
+  }catch(e){console.error('매장 특이사항 로드 오류:',e);}
+  try{
+    const saved=localStorage.getItem(LS_KEY_HISTORY);
+    if(saved){
+      const parsed=JSON.parse(saved);
+      parsed.forEach(r=>{if(r['날짜'])r['날짜']=parseExcelDate(r['날짜']);});
+      if(parsed.length>0){
+        state.history=parsed;
+        renderHistory();
+        updateHistDateList();
+        console.log('로컬스토리지에서 히스토리 즉시 로드:',parsed.length,'건');
+      }
+    }
+  }catch(e){console.error('로컬 히스토리 로드 오류:',e);}
+}
+function saveDailyWork(){
+  try{
+    const dataDate=state.dailyData.length?state.dailyData[0]['날짜']||getToday():getToday();
+    const work={
+      date:dataDate,
+      session:state.currentSession||'오전',
+      ctrlLogs:state.ctrlLogs,
+      trendPoints:state.trendPoints,
+      recordTime:state.recordTime||{},
+      dailyData:state.dailyData,
+      dailyMemo:state.dailyData.map(r=>({
+        key:r['점포 명']+'__'+(r['매칭 컨트롤러 명']||r['센서명']||''),
+        note:r._note||'',
+        status:r._status||'',
+        patternNote:r._patternNote||''
+      }))
+    };
+    localStorage.setItem(LS_KEY_WORK, JSON.stringify(work));
+    clearTimeout(dailyWorkSaveTimer);
+    dailyWorkSaveTimer=setTimeout(()=>{
+      if(dailyWorkRef) dailyWorkRef.set(work).catch(e=>console.error('dailyWork Firebase 오류:',e));
+    },500);
+    triggerAutoSheetsSync();
+  }catch(e){console.error('작업 자동저장 오류:',e);}
+}
+function loadDailyWork(){
+  try{
+    const saved=localStorage.getItem(LS_KEY_WORK);
+    if(!saved)return;
+    const work=JSON.parse(saved);
+    const dataDate=state.dailyData.length?state.dailyData[0]['날짜']||getToday():getToday();
+    const dateSess=state.currentSession||document.getElementById('check-session').value||'오전';
+    if(!work.date||work.date!==dataDate||work.session!==dateSess){
+      console.log('날짜/세션 불일치 → 이전 작업 데이터 무시 (저장:',work.date||'없음',work.session||'없음','현재:',dataDate,dateSess+')');
+      clearDailyWork();
+      return;
+    }
+    if(work.ctrlLogs)state.ctrlLogs=work.ctrlLogs;
+    if(work.recordTime)state.recordTime=work.recordTime;
+    if(work.trendPoints)state.trendPoints=work.trendPoints;
+    if(work.dailyMemo&&state.dailyData.length){
+      work.dailyMemo.forEach(m=>{
+        const r=state.dailyData.find(d=>
+          d['점포 명']+'__'+(d['매칭 컨트롤러 명']||d['센서명']||'')===m.key
+        );
+        if(r){
+          if(m.note)r._note=m.note;
+          if(m.status)r._status=m.status;
+          if(m.patternNote)r._patternNote=m.patternNote;
+        }
+      });
+    }
+    console.log('작업 데이터 복원 완료');
+  }catch(e){console.error('작업 복원 오류:',e);}
+}
+function clearDailyWork(){
+  localStorage.removeItem(LS_KEY_WORK);
+}
+function makeHistKey(r){
+  return (String(r['날짜']||'')+'_'+String(r['분류']||'').substring(0,2)+'_'+String(r['점포 명']||'')+'_'+String(r['매칭 컨트롤러 명']||r['센서명']||''))
+    .replace(/[.#$\[\]/\s]/g,'_').substring(0,220);
+}
+function saveToStorage(){
+  try{
+    setSyncStatus('saving');
+    const histObj={};
+    state.history.forEach(r=>{histObj[makeHistKey(r)]=r;});
+    historyRef.set(histObj)
+      .then(()=>setSyncStatus('synced'))
+      .catch(e=>{console.error('Firebase 저장 오류:',e);setSyncStatus('error');});
+    localStorage.setItem(LS_KEY_HISTORY, JSON.stringify(state.history));
+    return state.history.length;
+  }catch(e){
+    console.error('저장 오류:',e);
+    setSyncStatus('error');
+    return 0;
+  }
+}
+function clearStorage(){
+  if(!confirm('히스토리를 모두 삭제할까요?\n(Firebase + 브라우저 저장 데이터 모두 삭제됩니다)'))return;
+  historyRef.set(null)
+    .then(()=>{
+      dailyWorkRef.set(null);
+      localStorage.removeItem(LS_KEY_HISTORY);
+      localStorage.removeItem(LS_KEY_WORK);
+      state.history=[];
+      renderHistory();
+      alert('삭제 완료');
+    })
+    .catch(e=>alert('삭제 오류: '+e.message));
+}
+function setSyncStatus(status){
+  const el=document.getElementById('sync-status');
+  if(!el)return;
+  const map={
+    connected:['🟢 연결됨','#1d9e75','#eaf3de','#9fe1cb'],
+    synced:['✓ 동기화됨','#1d9e75','#eaf3de','#9fe1cb'],
+    saving:['⏳ 저장 중...','#ba7517','#faeeda','#fac775'],
+    offline:['🔴 오프라인','#c0392b','#fcebeb','#f7c1c1'],
+    error:['⚠ 오류','#c0392b','#fcebeb','#f7c1c1']
+  };
+  const [text,color,bg,border]=map[status]||['...','#999','#f5f4f0','#e0ded8'];
+  el.textContent=text;el.style.color=color;el.style.background=bg;el.style.borderColor=border;
+}
+function applyDailyWork(work){
+  if(!work)return;
+  const dataDate=state.dailyData.length?state.dailyData[0]['날짜']||getToday():getToday();
+  const dateSess=state.currentSession||document.getElementById('check-session').value||'오전';
+  if(!work.date||work.date!==dataDate||work.session!==dateSess)return;
+  if(work.ctrlLogs)state.ctrlLogs=work.ctrlLogs;
+  if(work.recordTime)state.recordTime=work.recordTime;
+  if(work.trendPoints)state.trendPoints=work.trendPoints;
+  if(work.dailyMemo&&state.dailyData.length){
+    work.dailyMemo.forEach(m=>{
+      const r=state.dailyData.find(d=>d['점포 명']+'__'+(d['매칭 컨트롤러 명']||d['센서명']||'')===m.key);
+      if(r){if(m.note)r._note=m.note;if(m.status)r._status=m.status;if(m.patternNote)r._patternNote=m.patternNote;}
+    });
+  }
+}
+function initFirebase(){
+  if(typeof HISTORY_DATA!=='undefined'&&Array.isArray(HISTORY_DATA)&&HISTORY_DATA.length>0){
+    state.history=HISTORY_DATA.slice();
+    state.history.forEach(r=>{if(r['날짜'])r['날짜']=parseExcelDate(r['날짜']||'');});
+    state.isViewMode=true;
+    renderHistory();
+    updateHistDateList();
+    try{renderReport();}catch(e){}
+    var ss=document.getElementById('sync-status');
+    if(ss){ss.textContent='👁 읽기 전용';ss.style.background='#f0ebff';ss.style.color='#7c3aed';ss.style.borderColor='#c4b5fd';}
+    var us=document.getElementById('upload-section');if(us)us.style.display='none';
+    var sb=document.getElementById('save-btn');if(sb)sb.style.display='none';
+    setTimeout(function(){
+      var histBtn=document.querySelector('.tab[onclick*="history"]');
+      if(histBtn)histBtn.click();
+    },100);
+    return;
+  }
+  historyRef=db.ref('/history');
+  dailyWorkRef=db.ref('/dailyWork');
+  db.ref('.info/connected').on('value',snap=>{
+    setSyncStatus(snap.val()===true?'connected':'offline');
+  });
+  let firstFbLoad=true;
+  historyRef.on('value',snapshot=>{
+    const data=snapshot.val();
+    if(data){
+      const records=Object.values(data);
+      records.forEach(r=>{if(r['날짜'])r['날짜']=parseExcelDate(r['날짜']);});
+      if(records.length>=state.history.length){
+        state.history=records;
+        localStorage.setItem(LS_KEY_HISTORY, JSON.stringify(state.history));
+      } else {
+        console.log('로컬 히스토리가 더 최신 상태 → Firebase에 업로드');
+        const histObj={};
+        state.history.forEach(r=>{histObj[makeHistKey(r)]=r;});
+        historyRef.set(histObj).catch(e=>console.error('Firebase 재동기화 오류:',e));
+      }
+      renderHistory();
+      updateHistDateList();
+      setSyncStatus('synced');
+      if(document.getElementById('tab-report')&&document.getElementById('tab-report').classList.contains('active'))renderReport();
+    } else if(firstFbLoad){
+      firstFbLoad=false;
+      if(state.history.length>0){
+        setSyncStatus('saving');
+        const histObj={};
+        state.history.forEach(r=>{histObj[makeHistKey(r)]=r;});
+        historyRef.set(histObj)
+          .then(()=>{setSyncStatus('synced');console.log('로컬→Firebase 마이그레이션:',state.history.length,'건');})
+          .catch(e=>{console.error('마이그레이션 오류:',e);setSyncStatus('error');});
+        renderHistory();
+        updateHistDateList();
+      } else {
+        setSyncStatus('synced');
+      }
+    }
+    firstFbLoad=false;
+  },err=>{
+    console.error('Firebase 히스토리 오류:',err);
+    setSyncStatus('error');
+    renderHistory();updateHistDateList();
+  });
+  dailyWorkRef.on('value',snapshot=>{
+    const work=snapshot.val();
+    if(!work)return;
+    applyDailyWork(work);
+    if(state.dailyData.length){
+      const isEditingCtrl=document.activeElement&&document.activeElement.closest('.ac-detail-cell');
+      if(isEditingCtrl)return;
+      updateStats();
+      renderDaily();
+      requestAnimationFrame(()=>{
+        Object.keys(state.openAcDetail).forEach(k=>{
+          if(state.openAcDetail[k]){renderCtrlLogs(k);renderTrendRows(k);}
+        });
+      });
+    }
+  });
+  storeNotesRef=db.ref('/storeNotes');
+  storeNotesRef.on('value',snapshot=>{
+    const data=snapshot.val();
+    if(data){
+      const merged={};
+      Object.values(data).forEach(rec=>{
+        if(rec&&rec.store)merged[rec.store]={text:rec.text||'',updatedAt:rec.updatedAt||null};
+      });
+      state.storeNotes=merged;
+      localStorage.setItem(LS_KEY_STORENOTES,JSON.stringify(state.storeNotes));
+      const isEditingNote=document.activeElement&&document.activeElement.matches&&document.activeElement.matches('.note-card2 textarea');
+      if(!isEditingNote)renderBrandNotes();
+    } else if(Object.keys(state.storeNotes).length>0){
+      const obj={};
+      Object.entries(state.storeNotes).forEach(([sName,note])=>{
+        obj[fbSafeKey(sName)]={store:sName,text:note.text||'',updatedAt:note.updatedAt||null};
+      });
+      storeNotesRef.set(obj).catch(e=>console.error('특이사항 마이그레이션 오류:',e));
+    }
+  },err=>console.error('Firebase 특이사항 오류:',err));
+}
+function checkStorageSize(){
+  try{
+    const data=localStorage.getItem(LS_KEY_HISTORY)||'[]';
+    const count=JSON.parse(data).length;
+    const kb=Math.round(new Blob([data]).size/1024);
+    const total=state.history.length;
+    document.getElementById('ls-status').textContent=
+      '브라우저 저장: '+count+'건 ('+kb+'KB) · 전체 히스토리: '+total+'건';
+  }catch(e){document.getElementById('ls-status').textContent='확인 실패: '+e.message;}
+}
+function updateHistDateList(){
+  let dl=document.getElementById('hist-dates');
+  if(!dl){dl=document.createElement('datalist');dl.id='hist-dates';document.body.appendChild(dl);}
+  const dates=[...new Set(state.history.map(r=>r['날짜']).filter(Boolean))].sort().reverse();
+  dl.innerHTML=dates.map(d=>`<option value="${d}">`).join('');
+}
+function loadHistoryView(){
+  const date=document.getElementById('view-date').value;
+  const session=document.getElementById('view-session').value;
+  if(!date||!session)return;
+  const histRows=state.history.filter(r=>
+    r['날짜']===date &&
+    String(r['분류']||'').substring(0,2)===session.substring(0,2)
+  );
+  if(!histRows.length){
+    alert(`${date} ${session} 데이터가 없습니다.`);
+    return;
+  }
+  if(!state.isViewMode)state.origDailyData=[...state.dailyData];
+  state.isViewMode=true;
+  const viewData=histRows.map(r=>({
+    ...r,
+    '_status':r._status||(()=>{
+      const t=parseTemp(r['실내온도']);
+      const d=parseTemp(r['온도편차']);
+      const s=state.settings;
+      if(t!==null&&(t>=s.highTemp||t<s.lowTemp))return'danger';
+      if(d!==null&&Math.abs(d)>s.devThreshold)return'warning';
+      return'ok';
+    })(),
+    '_note':r['비고']||'',
+    '_patternNote':r['추이패턴']||''
+  }));
+  state.dailyData=viewData;
+  document.getElementById('view-mode-badge').style.display='inline';
+  document.getElementById('save-btn').style.opacity='0.4';
+  document.getElementById('save-btn').style.pointerEvents='none';
+  document.getElementById('save-btn').title='조회 모드에서는 저장 불가';
+  document.getElementById('upload-section').style.display='none';
+  document.getElementById('daily-content').style.display='block';
+  updateStats();
+  renderDaily();
+}
+function clearHistoryView(){
+  if(!state.isViewMode)return;
+  state.isViewMode=false;
+  state.dailyData=state.origDailyData;
+  state.origDailyData=[];
+  document.getElementById('view-date').value='';
+  document.getElementById('view-session').value='';
+  document.getElementById('view-mode-badge').style.display='none';
+  document.getElementById('save-btn').style.opacity='';
+  document.getElementById('save-btn').style.pointerEvents='';
+  document.getElementById('save-btn').title='';
+  if(!state.dailyData.length){
+    document.getElementById('upload-section').style.display='block';
+    document.getElementById('daily-content').style.display='none';
+  }
+  updateStats();
+  renderDaily();
+}
+function parseExcelDate(val){
+  if(!val&&val!==0)return'';
+  const s=String(val);
+  if(/^\d{4}-\d{2}-\d{2}/.test(s))return s.split('T')[0].replace(/\s.*$/,'');
+  const n=parseFloat(s);
+  if(!isNaN(n)&&n>40000&&n<60000){
+    const d=new Date(Math.round((n-25569)*86400*1000));
+    const y=d.getUTCFullYear();
+    const m=String(d.getUTCMonth()+1).padStart(2,'0');
+    const day=String(d.getUTCDate()).padStart(2,'0');
+    return y+'-'+m+'-'+day;
+  }
+  return s.split('T')[0].replace(/\s.*$/,'');
+}
+function exportSharedHTML(){
+  if(!state.history.length){
+    alert('공유할 히스토리 데이터가 없습니다.\n먼저 💾 저장 버튼으로 데이터를 히스토리에 저장하세요.');
+    return;
+  }
+  const histJson=JSON.stringify(state.history);
+  let shareHtml=document.documentElement.outerHTML;
+  shareHtml=shareHtml.replace('const HISTORY_DATA = []','const HISTORY_DATA = '+histJson);
+  const blob=new Blob([shareHtml],{type:'text/html;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='온습도_모니터링_공유_'+getToday()+'.html';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  alert('✓ 공유용 HTML 다운로드 완료\n히스토리 '+state.history.length+'건 포함\n\n다운로드 폴더에서 파일을 찾아 공유하세요.\n받는 사람은 파일을 브라우저로 열면 히스토리·매장추이·보고서를 바로 볼 수 있어요.');
+}
+function saveCols(){alert('컬럼 설정이 저장되었습니다. 다음 업로드부터 적용됩니다.');}
+function getRptDateRange(){
+  const type=document.getElementById('rpt-type').value;
+  const now=new Date();
+  let from,to;
+  if(type==='week'){
+    const day=now.getDay();
+    const mon=new Date(now);mon.setDate(now.getDate()-(day===0?6:day-1));
+    from=mon.toISOString().split('T')[0];
+    to=now.toISOString().split('T')[0];
+  } else if(type==='month'){
+    from=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0')+'-01';
+    to=now.toISOString().split('T')[0];
+  } else {
+    from=document.getElementById('rpt-from').value||'';
+    to=document.getElementById('rpt-to').value||'';
+  }
+  return{from,to};
+}
+function filterByRange(history,from,to){
+  return history.filter(r=>{
+    if(!r['날짜'])return false;
+    if(from&&r['날짜']<from)return false;
+    if(to&&r['날짜']>to)return false;
+    return true;
+  });
+}
+function renderReport(){
+  const type=document.getElementById('rpt-type').value;
+  const customEl=document.getElementById('rpt-custom-range');
+  customEl.style.display=type==='custom'?'flex':'none';
+  const {from,to}=getRptDateRange();
+  if(!from&&!to&&type==='custom')return;
+  if(state.history.length===0){
+    const syncEl=document.getElementById('sync-status');
+    const isLoading=syncEl&&(syncEl.textContent.includes('⏳')||syncEl.textContent.includes('저장')||syncEl.textContent.includes('연결'));
+    document.getElementById('rpt-summary-cards').innerHTML=`<div style="grid-column:1/-1;padding:1.5rem;text-align:center;color:var(--text2)">${isLoading?'⏳ Firebase에서 데이터를 불러오는 중입니다. 잠시 후 자동으로 표시됩니다.':'해당 기간에 저장된 데이터가 없습니다.'}</div>`;
+    document.getElementById('rpt-store-rank').innerHTML='';
+    document.getElementById('rpt-ac-rank').innerHTML='';
+    document.getElementById('rpt-store-detail').innerHTML='<div class="empty">매장을 선택하면 상세 리포트를 확인할 수 있어요</div>';
+    return;
+  }
+  const rows=filterByRange(state.history,from,to);
+  const stores=[...new Set(rows.map(r=>r['점포 명']).filter(Boolean))];
+  const days=[...new Set(rows.map(r=>r['날짜']).filter(Boolean))];
+  const acUnits={};
+  rows.forEach(r=>{
+    const key=r['날짜']+'__'+r['점포 명']+'__'+(r['매칭 컨트롤러 명']||r['센서명']||'');
+    if(!acUnits[key])acUnits[key]={status:'ok'};
+    const st=reportBucket(calcStatus(r));
+    if(st==='danger')acUnits[key].status='danger';
+    else if(st==='warning'&&acUnits[key].status!=='danger')acUnits[key].status='warning';
+  });
+  const acUnitList=Object.values(acUnits);
+  const dangerCount=acUnitList.filter(u=>u.status==='danger').length;
+  const warnCount=acUnitList.filter(u=>u.status==='warning').length;
+  const issueRate=acUnitList.length?Math.round((dangerCount+warnCount)/acUnitList.length*100):0;
+  const periodLabel=from&&to?(from===to?from:from+' ~ '+to):(type==='week'?'이번 주':type==='month'?'이번 달':'전체');
+  document.getElementById('rpt-summary-cards').innerHTML=`
+    <div class="stat"><div class="stat-label">기간</div><div style="font-size:13px;font-weight:600;padding-top:6px;color:var(--text)">${periodLabel}</div></div>
+    <div class="stat"><div class="stat-label">포함 일수</div><div class="stat-val info">${days.length}</div></div>
+    <div class="stat"><div class="stat-label">총 매장수</div><div class="stat-val info">${stores.length}</div></div>
+    <div class="stat"><div class="stat-label">이상 건수</div><div class="stat-val danger">${dangerCount}</div></div>
+    <div class="stat"><div class="stat-label">이상/주의율</div><div class="stat-val ${issueRate>20?'danger':issueRate>10?'warn':'ok'}">${issueRate}%</div></div>`;
+  const storeAcMap={};
+  rows.forEach(r=>{
+    const sn=r['점포 명'];if(!sn)return;
+    const key=r['날짜']+'__'+sn+'__'+(r['매칭 컨트롤러 명']||r['센서명']||'');
+    if(!storeAcMap[key])storeAcMap[key]={store:sn,status:'ok'};
+    const st=reportBucket(calcStatus(r));
+    if(st==='danger')storeAcMap[key].status='danger';
+    else if(st==='warning'&&storeAcMap[key].status!=='danger')storeAcMap[key].status='warning';
+  });
+  const storeIssue={};
+  Object.values(storeAcMap).forEach(({store,status})=>{
+    if(!storeIssue[store])storeIssue[store]={danger:0,warn:0,total:0};
+    storeIssue[store].total++;
+    if(status==='danger')storeIssue[store].danger++;
+    else if(status==='warning')storeIssue[store].warn++;
+  });
+  const storeRanked=Object.entries(storeIssue).map(([n,v])=>({n,issue:v.danger+v.warn,...v}))
+    .filter(v=>v.issue>0).sort((a,b)=>b.danger-a.danger||b.issue-a.issue).slice(0,10);
+  const maxIssue=storeRanked[0]?.issue||1;
+  document.getElementById('rpt-store-rank').innerHTML=storeRanked.length
+    ? storeRanked.map((v,i)=>`
+      <div class="rank-row">
+        <div class="rank-num" style="background:${i<3?'#c0392b':'#e0ded8'};color:${i<3?'#fff':'#666'}">${i+1}</div>
+        <div class="rank-label" title="${v.n}">${v.n}</div>
+        <div class="rank-bar-wrap"><div class="rank-bar-fill" style="width:${Math.round(v.issue/maxIssue*100)}%;background:${v.danger>0?'#c0392b':'#ba7517'}"></div></div>
+        <div class="rank-val" style="color:${v.danger>0?'var(--danger)':'var(--warn)'}">${v.danger>0?v.danger+'건 이상':v.warn+'건 주의'}</div>
+      </div>`).join('')
+    : '<div class="empty" style="padding:1rem">이상/주의 없음</div>';
+  const acIssueMap={};
+  rows.forEach(r=>{
+    const acLabel=(r['점포 명']||'')+'/'+(r['매칭 컨트롤러 명']||r['센서명']||'');
+    const unitKey=r['날짜']+'__'+acLabel;
+    if(!acIssueMap[unitKey])acIssueMap[unitKey]={label:acLabel,status:'ok'};
+    const st=reportBucket(calcStatus(r));
+    if(st==='danger')acIssueMap[unitKey].status='danger';
+    else if(st==='warning'&&acIssueMap[unitKey].status!=='danger')acIssueMap[unitKey].status='warning';
+  });
+  const acIssue={};
+  Object.values(acIssueMap).forEach(({label,status})=>{
+    if(!acIssue[label])acIssue[label]={label,danger:0,warn:0};
+    if(status==='danger')acIssue[label].danger++;
+    else if(status==='warning')acIssue[label].warn++;
+  });
+  const acRanked=Object.values(acIssue).map(v=>({...v,issue:v.danger+v.warn}))
+    .filter(v=>v.issue>0).sort((a,b)=>b.danger-a.danger||b.issue-a.issue).slice(0,10);
+  const maxAc=acRanked[0]?.issue||1;
+  document.getElementById('rpt-ac-rank').innerHTML=acRanked.length
+    ? acRanked.map((v,i)=>`
+      <div class="rank-row">
+        <div class="rank-num" style="background:${i<3?'#c0392b':'#e0ded8'};color:${i<3?'#fff':'#666'}">${i+1}</div>
+        <div class="rank-label" title="${v.label}">${v.label}</div>
+        <div class="rank-bar-wrap"><div class="rank-bar-fill" style="width:${Math.round(v.issue/maxAc*100)}%;background:${v.danger>0?'#c0392b':'#ba7517'}"></div></div>
+        <div class="rank-val" style="color:${v.danger>0?'var(--danger)':'var(--warn)'}">${v.issue}</div>
+      </div>`).join('')
+    : '<div class="empty" style="padding:1rem">이상/주의 없음</div>';
+  const storeSel=document.getElementById('rpt-store-sel');
+  const cur=storeSel.value;
+  storeSel.innerHTML='<option value="">-- 매장 선택 --</option>'
+    +stores.sort().map(s=>`<option value="${escHtml(s)}"${s===cur?' selected':''}>${escHtml(s)}</option>`).join('');
+  if(cur&&stores.includes(cur))renderStoreReport();
+  else document.getElementById('rpt-store-detail').innerHTML='<div class="empty">매장을 선택하면 상세 리포트를 확인할 수 있어요</div>';
+}
+function renderStoreReport(){
+  const sName=document.getElementById('rpt-store-sel').value;
+  if(!sName){document.getElementById('rpt-store-detail').innerHTML='<div class="empty">매장을 선택하면 상세 리포트를 확인할 수 있어요</div>';return;}
+  const {from,to}=getRptDateRange();
+  const rows=filterByRange(state.history,from,to).filter(r=>r['점포 명']===sName);
+  if(!rows.length){document.getElementById('rpt-store-detail').innerHTML='<div class="empty">해당 기간에 기록이 없습니다</div>';return;}
+  const s=state.settings;
+  function getSt(r){
+    if(r._status==='cooling'||r._status==='offlow'||r._status==='runlow'||r._status==='ok')return r._status;
+    if(r._status==='danger'||r._status==='warning')return r._status;
+    const t=parseTemp(r['실내온도']),d=parseTemp(r['온도편차']);
+    if(t!==null&&(t>=s.highTemp||t<s.lowTemp))return'danger';
+    if(d!==null&&Math.abs(d)>s.devThreshold)return'warning';
+    return'ok';
+  }
+  const byDate={};
+  const dateAcMap={};
+  rows.forEach(r=>{
+    const dt=r['날짜'];
+    const acKey=dt+'__'+(r['매칭 컨트롤러 명']||r['센서명']||'');
+    if(!dateAcMap[acKey])dateAcMap[acKey]={date:dt,status:'ok'};
+    const st=reportBucket(getSt(r));
+    if(st==='danger')dateAcMap[acKey].status='danger';
+    else if(st==='warning'&&dateAcMap[acKey].status!=='danger')dateAcMap[acKey].status='warning';
+  });
+  Object.values(dateAcMap).forEach(({date,status})=>{
+    if(!byDate[date])byDate[date]={date,danger:0,warn:0,ok:0,total:0};
+    byDate[date].total++;
+    byDate[date][status]++;
+  });
+  const dates=Object.values(byDate).sort((a,b)=>a.date.localeCompare(b.date));
+  const acMap={};
+  rows.forEach(r=>{
+    const k=r['매칭 컨트롤러 명']||r['센서명']||'-';
+    if(!acMap[k])acMap[k]={name:k,danger:0,warn:0,ok:0,total:0,temps:[],notes:[],records:[]};
+    acMap[k].total++;
+    const stRaw=getSt(r);const st=reportBucket(stRaw);acMap[k][st]++;
+    const t=parseTemp(r['실내온도']);if(t!==null)acMap[k].temps.push(t);
+    const note=(r['비고']||'').trim();
+    if(note&&!acMap[k].notes.includes(note))acMap[k].notes.push(note);
+    acMap[k].records.push({
+      date:r['날짜']||'',
+      sess:r['분류']?String(r['분류']).substring(0,2):'',
+      status:stRaw,
+      temp:r['실내온도']||'-',
+      dev:r['온도편차']||'-',
+      note:note
+    });
+  });
+  Object.values(acMap).forEach(ac=>ac.records.sort((a,b)=>a.date.localeCompare(b.date)||a.sess.localeCompare(b.sess)));
+  const acList=Object.values(acMap).sort((a,b)=>b.danger-a.danger||b.warn-a.warn);
+  const W=480,H=80,PL=30,PR=10,PT=8,PB=24;
+  const dangerCnts=dates.map(d=>d.danger+d.warn);
+  const maxCnt=Math.max(...dangerCnts,1);
+  const xp=i=>PL+i*(W-PL-PR)/(Math.max(dates.length-1,1));
+  const yp=v=>PT+(H-PT-PB)*(1-v/maxCnt);
+  let bars='';
+  dates.forEach((d,i)=>{
+    const h=(H-PT-PB)*(d.danger+d.warn)/maxCnt;
+    const y=H-PB-h;
+    const col=d.danger>0?'#c0392b':d.warn>0?'#ba7517':'#1d9e75';
+    bars+=`<rect x="${(xp(i)-8).toFixed(1)}" y="${y.toFixed(1)}" width="16" height="${h.toFixed(1)}" fill="${col}" rx="2" opacity="0.8"/>`;
+  });
+  let xlabels='';
+  const step=Math.max(1,Math.ceil(dates.length/6));
+  dates.forEach((d,i)=>{
+    if(i%step===0||i===dates.length-1)
+      xlabels+=`<text x="${xp(i).toFixed(1)}" y="${H-4}" text-anchor="middle" font-size="9" fill="#999">${d.date.substring(5)}</text>`;
+  });
+  document.getElementById('rpt-store-detail').innerHTML=`
+    <div style="margin-bottom:14px">
+      <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:6px">날짜별 이상/주의 건수</div>
+      <svg viewBox="0 0 ${W} ${H}" style="width:100%;max-width:${W}px;height:${H}px;overflow:visible">
+        <line x1="${PL}" y1="${PT}" x2="${PL}" y2="${H-PB}" stroke="#e0ded8" stroke-width="0.5"/>
+        <line x1="${PL}" y1="${H-PB}" x2="${W-PR}" y2="${H-PB}" stroke="#e0ded8" stroke-width="0.5"/>
+        ${bars}${xlabels}
+        <text x="${PL-4}" y="${PT+4}" text-anchor="end" font-size="9" fill="#999">${maxCnt}</text>
+        <text x="${PL-4}" y="${H-PB}" text-anchor="end" font-size="9" fill="#999">0</text>
+      </svg>
+      <div style="display:flex;gap:12px;font-size:11px;color:var(--text2);margin-top:4px">
+        <span><span style="display:inline-block;width:10px;height:10px;background:#c0392b;border-radius:2px;margin-right:3px"></span>이상</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#ba7517;border-radius:2px;margin-right:3px"></span>주의</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:#1d9e75;border-radius:2px;margin-right:3px"></span>정상</span>
+      </div>
+    </div>
+    <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:8px">에어컨별 현황</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px">
+      <thead><tr style="font-size:11px;color:var(--text2)">
+        <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border)">에어컨</th>
+        <th style="text-align:center;padding:5px 8px;border-bottom:1px solid var(--border)">점검수</th>
+        <th style="text-align:center;padding:5px 8px;border-bottom:1px solid var(--border)">이상</th>
+        <th style="text-align:center;padding:5px 8px;border-bottom:1px solid var(--border)">주의</th>
+        <th style="text-align:center;padding:5px 8px;border-bottom:1px solid var(--border)">이상률</th>
+        <th style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)">평균온도</th>
+        <th style="text-align:right;padding:5px 8px;border-bottom:1px solid var(--border)">최고온도</th>
+        <th style="text-align:left;padding:5px 8px;border-bottom:1px solid var(--border)">날짜별 기록</th>
+      </tr></thead>
+      <tbody>${acList.map((ac,acIdx)=>{
+        const rate=Math.round((ac.danger+ac.warn)/ac.total*100);
+        const avg=ac.temps.length?(ac.temps.reduce((a,b)=>a+b,0)/ac.temps.length).toFixed(1)+' °C':'-';
+        const max=ac.temps.length?Math.max(...ac.temps).toFixed(1)+' °C':'-';
+        const cls=ac.danger>0?'var(--danger)':ac.warn>0?'var(--warn)':'var(--ok)';
+        const hasIssue=ac.danger>0||ac.warn>0;
+        const detailId='rptac-'+acIdx;
+        const btnLabel=hasIssue?`▲ ${ac.records.length}건 접기`:`▼ ${ac.records.length}건 보기`;
+        const dotColor={'danger':'#c0392b','warning':'#ba7517','cooling':'#c0392b','offlow':'#185fa5','runlow':'#9a5b00','ok':'#1d9e75'};
+        const detailRows=ac.records.map(rec=>{
+          const sessColor=rec.sess==='오전'?'#185fa5':'#9a6000';
+          const sessBg=rec.sess==='오전'?'#e6f4ff':'#fff7e6';
+          const sessBadge=rec.sess?`<span style="font-size:10px;padding:1px 5px;border-radius:8px;background:${sessBg};color:${sessColor};font-weight:600;margin-right:4px">${escHtml(rec.sess)}</span>`:'';
+          const dot=`<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:${dotColor[rec.status]||'#ccc'};margin-right:4px;vertical-align:middle;flex-shrink:0"></span>`;
+          const tempCol=(rec.status==='danger'||rec.status==='cooling'||rec.status==='offlow'||rec.status==='runlow')?'color:#c0392b;font-weight:600':rec.status==='warning'?'color:#ba7517;font-weight:500':'color:var(--text)';
+          const noteHtml=rec.note?`<span style="color:var(--text2)">${escHtml(rec.note)}</span>`:`<span style="color:var(--text3);font-style:italic">특이사항 없음</span>`;
+          return `<div style="display:flex;align-items:flex-start;gap:8px;padding:5px 0;border-bottom:1px solid #f0ede8;font-size:12px">
+            <span style="min-width:54px;color:var(--text3);flex-shrink:0">${escHtml(rec.date.substring(5))}</span>
+            <span style="flex-shrink:0">${sessBadge}${dot}</span>
+            <span style="${tempCol};min-width:80px;flex-shrink:0">${escHtml(rec.temp)} ${escHtml(rec.dev)}</span>
+            <span style="flex:1">${noteHtml}</span>
+          </div>`;
+        }).join('');
+        return `<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:6px 8px;font-weight:500">${escHtml(ac.name)}</td>
+          <td style="text-align:center;padding:6px 8px">${ac.total}</td>
+          <td style="text-align:center;padding:6px 8px;color:var(--danger);font-weight:${ac.danger>0?'600':'400'}">${ac.danger}</td>
+          <td style="text-align:center;padding:6px 8px;color:var(--warn);font-weight:${ac.warn>0?'600':'400'}">${ac.warn}</td>
+          <td style="text-align:center;padding:6px 8px;color:${cls};font-weight:600">${rate}%</td>
+          <td style="text-align:right;padding:6px 8px">${avg}</td>
+          <td style="text-align:right;padding:6px 8px;color:${parseFloat(max)>=s.highTemp?'var(--danger)':'var(--text)'};font-weight:${parseFloat(max)>=s.highTemp?'600':'400'}">${max}</td>
+          <td style="padding:6px 8px">
+            <button onclick="(function(b,id){var d=document.getElementById(id);var open=d.style.display!=='none';d.style.display=open?'none':'';b.textContent=open?b.textContent.replace('▲','▼').replace('접기','보기'):b.textContent.replace('▼','▲').replace('보기','접기');})(this,'${detailId}')" style="background:none;border:1px solid var(--border);border-radius:4px;padding:2px 8px;font-size:11px;cursor:pointer;color:var(--text2);font-family:inherit;white-space:nowrap">${btnLabel}</button>
+          </td>
+        </tr>
+        <tr id="${detailId}" style="display:${hasIssue?'':'none'}">
+          <td colspan="8" style="padding:0 8px 10px 24px">
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin-top:2px">
+              ${detailRows}
+            </div>
+          </td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+function printReport(){
+  document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.getElementById('tab-report').classList.add('active');
+  setTimeout(()=>window.print(),100);
+}
+function generateSlackReport() {
+  if (!state.dailyData.length) {
+    alert("점검 데이터가 없습니다. 먼저 엑셀 데이터를 업로드해 주세요.");
+    return;
+  }
+  const issueRows = state.dailyData.filter(r => r._status === 'cooling' || r._status === 'offlow' || r._status === 'runlow');
+  if (!issueRows.length) {
+    alert("오늘 점검 결과 이상징후가 발생한 매장이 없습니다.");
+    return;
+  }
+  const storeGroups = {};
+  issueRows.forEach((r, idx) => {
+    const sName = r['점포 명'];
+    if (!storeGroups[sName]) storeGroups[sName] = [];
+    storeGroups[sName].push(r);
+  });
+  let reportText = "";
+  let storeIdx = 1;
+  const modeKr = { cool: "냉방", heat: "난방", fan: "송풍" };
+  const powerKr = { low: "약", mid: "중", high: "강" };
+  const charIdx = ["a", "b", "c", "d", "e", "f", "g", "h", "i", "j"];
+  const romanIdx = ["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"];
+  function getDurationText(hhmm1, hhmm2) {
+    if (!hhmm1) return "";
+    const p1 = hhmm1.split(':');
+    const min1 = parseInt(p1[0] || 0) * 60 + parseInt(p1[1] || 0);
+    let min2 = null;
+    let endStr = "";
+    if (hhmm2) {
+      const p2 = hhmm2.split(':');
+      min2 = parseInt(p2[0] || 0) * 60 + parseInt(p2[1] || 0);
+      endStr = hhmm2;
+    } else {
+      return "가동 중";
+    }
+    if (min2 !== null && min2 > min1) {
+      const diff = min2 - min1;
+      const h = Math.floor(diff / 60);
+      const m = diff % 60;
+      const durStr = h > 0 ? (m > 0 ? `${h}시간 ${m}분` : `${h}시간`) : `${m}분`;
+      return `${durStr} (${hhmm1}~${endStr})`;
+    }
+    return `(${hhmm1}~${endStr})`;
+  }
+  Object.entries(storeGroups).forEach(([sName, rows]) => {
+    reportText += `${storeIdx}. ${sName}\n`;
+    const acGroups = {};
+    rows.forEach(r => {
+      const key = r['매칭 컨트롤러 명'] || r['센서명'] || 'unknown';
+      if (!acGroups[key]) acGroups[key] = [];
+      acGroups[key].push(r);
+    });
+    let acIdx = 0;
+    Object.entries(acGroups).forEach(([acName, acRows]) => {
+      const cLetter = charIdx[acIdx % charIdx.length];
+      reportText += `   ${cLetter}. 센서: ${acName}\n`;
+      const lastRow = acRows[acRows.length - 1];
+      const acKey = sName + '__' + acName;
+      const logs = state.ctrlLogs[acKey] || [];
+      let itemIdx = 0;
+      if (logs.length > 0) {
+        const activeLogs = logs.filter(l => l.event !== 'off');
+        if (activeLogs.length > 0) {
+          const lastActive = activeLogs[activeLogs.length - 1];
+          const modeStr = modeKr[lastActive.mode] || "";
+          const pwStr = powerKr[lastActive.power] || "";
+          const tempVal = lastActive.temp ? `${parseFloat(lastActive.temp).toFixed(0)}도` : "";
+          let ctrlDesc = `${tempVal} ${pwStr}`.trim();
+          if (modeStr) ctrlDesc = `${modeStr} ${ctrlDesc}`.trim();
+          reportText += `      ${romanIdx[itemIdx]}. 제어 온도: ${ctrlDesc}\n`;
+          itemIdx++;
+          const hhmmStart = lastActive.time;
+          let hhmmEnd = "";
+          const activeIdxInLogs = logs.indexOf(lastActive);
+          const nextLogs = logs.slice(activeIdxInLogs + 1);
+          const offLog = nextLogs.find(l => l.event === 'off');
+          if (offLog) {
+            hhmmEnd = offLog.time;
+          } else {
+            const safeKey = acKey.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+            hhmmEnd = (state.recordTime && state.recordTime[safeKey]) || "";
+          }
+          const durText = getDurationText(hhmmStart, hhmmEnd);
+          if (durText) {
+            reportText += `         1. ${durText}\n`;
+          }
+        } else {
+          reportText += `      ${romanIdx[itemIdx]}. 제어 온도: OFF 상태\n`;
+          itemIdx++;
+        }
+      } else {
+        const onoff = lastRow['ON / OFF'] || '-';
+        const setTemp = lastRow['설정 온도'] || '-';
+        reportText += `      ${romanIdx[itemIdx]}. 제어 온도: 설정 ${setTemp} (상태: ${onoff})\n`;
+        itemIdx++;
+      }
+      let trendStr = "";
+      if (logs.length > 0) {
+        const tempLogs = logs.filter(l => l.startTemp || l.endTemp);
+        if (tempLogs.length > 0) {
+          const firstLog = tempLogs[0];
+          const lastLog = tempLogs[tempLogs.length - 1];
+          const st = parseFloat(firstLog.startTemp);
+          const et = parseFloat(lastLog.endTemp || lastLog.startTemp);
+          if (!isNaN(st)) {
+            const diff = (et - st).toFixed(1);
+            const diffSign = diff > 0 ? `+${diff}` : diff;
+            trendStr = `${st.toFixed(2)} -> ${et.toFixed(2)} (${diffSign})`;
+          }
+        }
+      }
+      if (!trendStr) {
+        const pts = (state.trendPoints[acKey] || []).filter(p => p.time && p.temp !== "").map(p => parseFloat(p.temp)).filter(t => !isNaN(t));
+        if (pts.length >= 2) {
+          const st = pts[0];
+          const et = pts[pts.length - 1];
+          const diff = (et - st).toFixed(2);
+          const diffSign = diff > 0 ? `+${diff}` : diff;
+          trendStr = `${st.toFixed(2)} -> ${et.toFixed(2)} (${diffSign})`;
+        }
+      }
+      if (!trendStr) {
+        const curTemp = lastRow['실내온도'] || '-';
+        const dev = lastRow['온도편차'] || '-';
+        trendStr = `현재 실내온도: ${curTemp} (편차: ${dev})`;
+      }
+      reportText += `      ${romanIdx[itemIdx]}. 온도 추이: ${trendStr}\n`;
+      itemIdx++;
+      const reason = lastRow._patternNote || "";
+      if (reason) {
+        reportText += `      ${romanIdx[itemIdx]}. 사유\n`;
+        reportText += `         1. ${reason}\n`;
+        itemIdx++;
+      }
+      const note = lastRow._note || "";
+      if (note) {
+        reportText += `      ${romanIdx[itemIdx]}. 특이사항\n`;
+        reportText += `         1. ${note}\n`;
+        itemIdx++;
+      }
+      acIdx++;
+    });
+    storeIdx++;
+  });
+  const textarea = document.getElementById("slack-report-text");
+  textarea.value = reportText;
+  document.getElementById("slack-modal").classList.add("active");
+  copySlackReportText(true);
+}
+function closeSlackModal() {
+  document.getElementById("slack-modal").classList.remove("active");
+}
+function copySlackReportText(silent) {
+  const text = document.getElementById("slack-report-text").value;
+  navigator.clipboard.writeText(text).then(() => {
+    if (!silent) {
+      showToastMessage("✓ 클립보드에 다시 복사되었습니다!");
+    } else {
+      showToastMessage("✓ 슬랙 보고서가 복사되었습니다!");
+    }
+  }).catch(err => {
+    console.error("복사 실패:", err);
+    if (!silent) alert("복사에 실패했습니다. 직접 드래그해서 복사해 주세요.");
+  });
+}
+function showToastMessage(msg) {
+  const toast = document.getElementById("toast-message");
+  toast.textContent = msg;
+  toast.classList.add("active");
+  setTimeout(() => {
+    toast.classList.remove("active");
+  }, 2500);
+}
+function saveQuickPhrases() {
+  const reasonsText = document.getElementById('s-quick-reasons').value;
+  const notesText = document.getElementById('s-quick-notes').value;
+  state.settings.quickReasons = reasonsText.split('\n').map(s => s.trim()).filter(Boolean);
+  state.settings.quickNotes = notesText.split('\n').map(s => s.trim()).filter(Boolean);
+  localStorage.setItem(LS_KEY_SETTINGS, JSON.stringify(state.settings));
+  const el = document.getElementById('quick-phrases-saved');
+  if (el) {
+    el.style.display = 'inline';
+    setTimeout(() => el.style.display = 'none', 2000);
+  }
+  renderDaily();
+}
+function setCurrentRecordTime(acKey) {
+  const d = new Date();
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const timeStr = `${hh}:${mm}`;
+  if (!state.recordTime) state.recordTime = {};
+  const safeKey = acKey.replace(/[^a-zA-Z0-9가-힣]/g, '_');
+  state.recordTime[safeKey] = timeStr;
+  const inp = document.getElementById(`record-time-${safeKey}`);
+  if (inp) {
+    inp.value = timeStr;
+  }
+  updateTimeline(acKey);
+  saveDailyWork();
+}
+function updatePatternNote(sName, origIdx, val) {
+  let acKey = '';
+  if (state.dailyData[origIdx] && state.dailyData[origIdx]['점포 명'] === sName) {
+    acKey = state.dailyData[origIdx]['매칭 컨트롤러 명'] || state.dailyData[origIdx]['센서명'] || '';
+  }
+  if (acKey) {
+    state.dailyData.forEach(r => {
+      if (r['점포 명'] === sName && (r['매칭 컨트롤러 명'] || r['센서명'] || '') === acKey) {
+        r._patternNote = val;
+      }
+    });
+  } else {
+    if (state.dailyData[origIdx] && state.dailyData[origIdx]['점포 명'] === sName) {
+      state.dailyData[origIdx]._patternNote = val;
+    }
+  }
+  saveDailyWork();
+}
+function restoreDailyDataFromStorage(){
+  try{
+    const saved=localStorage.getItem(LS_KEY_WORK);
+    if(!saved)return;
+    const work=JSON.parse(saved);
+    if(work && work.dailyData && work.dailyData.length){
+      state.currentSession=work.session||'오전';
+      const sessionEl=document.getElementById('check-session');
+      if(sessionEl)sessionEl.value=state.currentSession;
+      state.dailyData=work.dailyData;
+      state.ctrlLogs=work.ctrlLogs||{};
+      state.trendPoints=work.trendPoints||{};
+      state.recordTime=work.recordTime||{};
+      state.mergedMode=false;
+      if(work.dailyMemo){
+        work.dailyMemo.forEach(m=>{
+          const r=state.dailyData.find(d=>d['점포 명']+'__'+(d['매칭 컨트롤러 명']||d['센서명']||'')===m.key);
+          if(r){
+            if(m.note)r._note=m.note;
+            if(m.status)r._status=m.status;
+            if(m.patternNote)r._patternNote=m.patternNote;
+          }
+        });
+      }
+      document.getElementById('upload-section').style.display='none';
+      document.getElementById('daily-content').style.display='block';
+      updateStats();
+      renderDaily();
+      updateSessionBadge();
+      checkMergeAvailable();
+      console.log('이전 작업 상태 자동 복원 완료 (날짜:', work.date, ' 세션:', work.session, ')');
+    }
+  }catch(e){
+    console.error('이전 작업 자동 복원 실패:',e);
+  }
+}
+initHeader();
+loadFromStorage();
+initFirebase();
+updateHistDateList();
+restoreDailyDataFromStorage();
+setTimeout(()=>{
+  const el=document.getElementById('restore-status');
+  if(el){
+    const saved=localStorage.getItem('hvac_history_v1');
+    if(saved){
+      try{
+        const cnt=JSON.parse(saved).length;
+        if(cnt>0){el.textContent='브라우저에 '+cnt+'건 저장됨';el.style.color='var(--ok)';}
+      }catch(e){}
+    }
+  }
+},100);
+</script>
+</body>
+</html>
